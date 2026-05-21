@@ -42,15 +42,6 @@ document.addEventListener('DOMContentLoaded', () => {
         btnClosePreviewBottom: document.getElementById('btnClosePreviewBottom'),
         btnPrintFromPreview: document.getElementById('btnPrintFromPreview'),
 
-        // 관리자 결재 설정 관련 엘리먼트 추가
-        adminApprovalModeRadios: document.getElementsByName('adminApprovalMode'),
-        adminBulkPadArea: document.getElementById('adminBulkPadArea'),
-        adminIndivGuidance: document.getElementById('adminIndivGuidance'),
-        btnClearAdminBulkSignature: document.getElementById('btnClearAdminBulkSignature'),
-        btnSaveAdminBulkSignature: document.getElementById('btnSaveAdminBulkSignature'),
-        btnDeleteAdminBulkSignature: document.getElementById('btnDeleteAdminBulkSignature'),
-        adminBulkSavedBadge: document.getElementById('adminBulkSavedBadge'),
-        
         // 개별 결재 모달 엘리먼트 추가
         adminApprovalModal: document.getElementById('adminApprovalModal'),
         adminApprovalModalTitle: document.getElementById('adminApprovalModalTitle'),
@@ -223,7 +214,7 @@ document.addEventListener('DOMContentLoaded', () => {
         const linksCard = document.getElementById('linksCard');
         const linksBody = document.getElementById('linksBody');
         
-        linksBody.innerHTML = '<tr><td colspan="6" style="padding:1rem; text-align:center;">데이터를 불러오는 중입니다...</td></tr>';
+        linksBody.innerHTML = '<tr><td colspan="5" style="padding:1rem; text-align:center;">데이터를 불러오는 중입니다...</td></tr>';
         linksCard.classList.remove('hidden');
 
         let submittedData = [];
@@ -235,29 +226,178 @@ document.addEventListener('DOMContentLoaded', () => {
             console.error('Firebase 로드 실패', e);
         }
 
-        // ── 부장 일괄 결재 서명 복구 로직 ───────────────────────
+        // 일괄 서명 복구 판별
         const savedApproval = submittedData.find(item => item.adminSignature);
         if (savedApproval && adminApprovalMode === 'bulk') {
             adminBulkSignatureDataUrl = savedApproval.adminSignature;
-            
-            document.getElementById('adminBulkSignaturePad').style.display = 'none';
-            elements.btnClearAdminBulkSignature.style.display = 'none';
-            elements.btnSaveAdminBulkSignature.style.display = 'none';
-            elements.btnDeleteAdminBulkSignature.style.display = 'inline-flex';
-            elements.adminBulkSavedBadge.style.display = 'block';
         } else if (adminApprovalMode === 'bulk' && !savedApproval) {
             adminBulkSignatureDataUrl = null;
-            document.getElementById('adminBulkSignaturePad').style.display = 'block';
-            elements.btnClearAdminBulkSignature.style.display = 'inline-flex';
-            elements.btnSaveAdminBulkSignature.style.display = 'inline-flex';
-            elements.btnDeleteAdminBulkSignature.style.display = 'none';
-            elements.adminBulkSavedBadge.style.display = 'none';
         }
-        // ───────────────────────────────────────────────────────
-        
+
         linksBody.innerHTML = '';
         const baseUrl = window.location.href.split('?')[0];
         
+        // ── 1. 학과부장 행 렌더링 ───────────────────────
+        const deptNames = Object.keys(safetyData.departments);
+        const deptHeadName = deptNames.length > 0 ? safetyData.departments[deptNames[0]].head : "최지은";
+
+        let approvalBadge = '';
+        if (adminApprovalMode === 'bulk') {
+            approvalBadge = adminBulkSignatureDataUrl 
+                ? '<span class="badge badge-success">✅ 일괄결재완료</span>' 
+                : '<span class="badge badge-warning">결재 대기</span>';
+        } else {
+            approvalBadge = '<span style="color:var(--text-muted);font-weight:600;">-</span>';
+        }
+
+        const headRowTr = document.createElement('tr');
+        headRowTr.style.backgroundColor = '#f8fafc';
+        headRowTr.innerHTML = `
+            <td style="text-align:center;">${approvalBadge}</td>
+            <td><strong>학과부장</strong></td>
+            <td><strong>학과부장</strong></td>
+            <td><strong>${deptHeadName}</strong></td>
+            <td>
+                <div style="display:flex; flex-direction:column; gap:0.25rem; font-size:0.75rem; text-align:left; line-height:1.2;">
+                    <label style="display:flex; align-items:center; gap:0.25rem; cursor:pointer; font-weight:700;">
+                        <input type="radio" name="adminApprovalMode" value="bulk" ${adminApprovalMode === 'bulk' ? 'checked' : ''}> 모든 실습실에 동일 서명 일괄 적용
+                    </label>
+                    <label style="display:flex; align-items:center; gap:0.25rem; cursor:pointer; font-weight:700; position:relative;">
+                        <input type="radio" name="adminApprovalMode" value="individual" ${adminApprovalMode === 'individual' ? 'checked' : ''}> 실습실별 개별 서명 적용
+                    </label>
+                    <div id="indivGuidanceText" style="color:var(--danger-color); font-size:0.7rem; padding-left:1.1rem; font-weight:600; display:${adminApprovalMode === 'individual' ? 'block' : 'none'};">
+                        ⚠️ (여러번 각각 직접 서명해야 합니다)
+                    </div>
+                </div>
+            </td>
+        `;
+        linksBody.appendChild(headRowTr);
+
+        // ── 2. 학과부장 일괄 결재 서명 패드 행 렌더링 (일괄 모드일 때만 노출) ───────────────────────
+        if (adminApprovalMode === 'bulk') {
+            const bulkSigRowTr = document.createElement('tr');
+            bulkSigRowTr.id = 'adminBulkSignatureRow';
+            bulkSigRowTr.style.backgroundColor = '#f1f5f9';
+            bulkSigRowTr.innerHTML = `
+                <td colspan="5" style="padding: 0.75rem;">
+                    <div style="display:flex; align-items:center; justify-content:center; gap:2rem; flex-wrap:wrap;">
+                        <div style="display:flex; flex-direction:column; gap:0.4rem; align-items:center;">
+                            <span style="font-size:0.8rem; color:var(--text-muted); font-weight:600;">✍️ 학과부장 일괄 결재 서명</span>
+                            <div style="display:flex; gap:0.25rem;">
+                                <button class="btn btn-outline" id="btnClearAdminBulkSignature" type="button" style="padding:0.15rem 0.4rem; font-size:0.75rem;">지우기</button>
+                                <button class="btn btn-primary" id="btnSaveAdminBulkSignature" type="button" style="padding:0.15rem 0.4rem; font-size:0.75rem; background-color:var(--success-color); color:white;">💾 결재 저장</button>
+                                <button class="btn btn-secondary" id="btnDeleteAdminBulkSignature" type="button" style="padding:0.15rem 0.4rem; font-size:0.75rem; background-color:var(--danger-color); color:white; display:none;">❌ 결재 취소</button>
+                            </div>
+                        </div>
+                        <div style="position:relative; width:300px; height:120px;">
+                            <canvas id="adminBulkSignaturePad" width="300" height="120" style="background:white; border:1px solid #cbd5e1; border-radius:4px; touch-action:none; display:block;"></canvas>
+                            <div id="adminBulkSavedBadge" style="display:none; position:absolute; top:0; left:0; width:100%; height:100%; background:rgba(255,255,255,0.95); display:flex; align-items:center; justify-content:center; border-radius:4px; border:1px solid #cbd5e1;">
+                                <span class="badge badge-success" style="font-size:0.9rem; padding:0.4rem 0.8rem;">✅ 일괄 결재 서명 저장됨</span>
+                            </div>
+                        </div>
+                    </div>
+                </td>
+            `;
+            linksBody.appendChild(bulkSigRowTr);
+
+            // 동적 생성된 일괄 서명 패드 초기화 및 이벤트 연결
+            const bulkCanvas = document.getElementById('adminBulkSignaturePad');
+            const clearBtn = document.getElementById('btnClearAdminBulkSignature');
+            const saveBtn = document.getElementById('btnSaveAdminBulkSignature');
+            const deleteBtn = document.getElementById('btnDeleteAdminBulkSignature');
+            const savedBadge = document.getElementById('adminBulkSavedBadge');
+
+            if (bulkCanvas) {
+                initSignaturePad(bulkCanvas, clearBtn, () => {
+                    adminBulkSignatureDataUrl = null;
+                });
+            }
+
+            // 복구된 상태에 따른 서명패드 엘리먼트 가시성 동기화
+            if (adminBulkSignatureDataUrl) {
+                if (bulkCanvas) bulkCanvas.style.display = 'none';
+                if (clearBtn) clearBtn.style.display = 'none';
+                if (saveBtn) saveBtn.style.display = 'none';
+                if (deleteBtn) deleteBtn.style.display = 'inline-flex';
+                if (savedBadge) savedBadge.style.display = 'flex';
+            } else {
+                if (bulkCanvas) bulkCanvas.style.display = 'block';
+                if (clearBtn) clearBtn.style.display = 'inline-flex';
+                if (saveBtn) saveBtn.style.display = 'inline-flex';
+                if (deleteBtn) deleteBtn.style.display = 'none';
+                if (savedBadge) savedBadge.style.display = 'none';
+            }
+
+            // 버튼 이벤트 바인딩 다시 입히기
+            if (saveBtn) {
+                saveBtn.addEventListener('click', async () => {
+                    const m = elements.monthSelect.value;
+                    const d = elements.dayInput.value;
+                    if (!m || !d) {
+                        alert('점검 월과 일을 선택해 주세요.');
+                        return;
+                    }
+                    if (!window.currentSubmittedData || window.currentSubmittedData.length === 0) {
+                        alert('제출 완료된 실습실 점검표가 없습니다. 제출 후에 결재해 주세요.');
+                        return;
+                    }
+
+                    if (bulkCanvas) {
+                        const ctx = bulkCanvas.getContext('2d');
+                        const buffer = new Uint32Array(ctx.getImageData(0, 0, bulkCanvas.width, bulkCanvas.height).data.buffer);
+                        const hasSignature = buffer.some(color => color !== 0);
+                        
+                        if (!hasSignature) {
+                            alert('서명 패드에 서명을 그려주세요.');
+                            return;
+                        }
+                        adminBulkSignatureDataUrl = bulkCanvas.toDataURL("image/png");
+                    }
+
+                    try {
+                        if (window.firebaseDB) {
+                            await window.firebaseDB.saveAdminBulkApproval(m, d, window.currentSubmittedData, adminBulkSignatureDataUrl);
+                            alert('일괄 결재 서명이 저장되었습니다.');
+                            generateAdminLinks();
+                        }
+                    } catch (err) {
+                        console.error("일괄 결재 저장 에러:", err);
+                        alert('일괄 결재 저장 중 에러가 발생했습니다.');
+                    }
+                });
+            }
+
+            if (deleteBtn) {
+                deleteBtn.addEventListener('click', async () => {
+                    const m = elements.monthSelect.value;
+                    const d = elements.dayInput.value;
+                    if (!confirm('정말로 일괄 결재를 취소하시겠습니까?')) return;
+
+                    try {
+                        if (window.firebaseDB) {
+                            await window.firebaseDB.deleteAdminBulkApproval(m, d, window.currentSubmittedData);
+                            alert('일괄 결재가 취소되었습니다.');
+                            adminBulkSignatureDataUrl = null;
+                            generateAdminLinks();
+                        }
+                    } catch (err) {
+                        console.error("일괄 결재 취소 에러:", err);
+                        alert('일괄 결재 취소 중 에러가 발생했습니다.');
+                    }
+                });
+            }
+        }
+
+        // 라디오 버튼 이벤트 바인딩 다시 입히기 (headRowTr 내부)
+        const radios = headRowTr.querySelectorAll('input[name="adminApprovalMode"]');
+        radios.forEach(radio => {
+            radio.addEventListener('change', (e) => {
+                adminApprovalMode = e.target.value;
+                generateAdminLinks();
+            });
+        });
+
+        // ── 3. 실습실 데이터 리스트 정렬 및 렌더링 ───────────────────────
         let allRooms = [];
         Object.keys(safetyData.departments).forEach(deptName => {
             const dept = safetyData.departments[deptName];
@@ -266,11 +406,9 @@ document.addEventListener('DOMContentLoaded', () => {
             });
         });
         
-        // 최지은 선생님 행을 가장 위로 정렬
+        // 담당교사 이름순(가나다순) 정렬
         allRooms.sort((a, b) => {
-            if (a.room.teacher === '최지은' && b.room.teacher !== '최지은') return -1;
-            if (a.room.teacher !== '최지은' && b.room.teacher === '최지은') return 1;
-            return 0;
+            return a.room.teacher.localeCompare(b.room.teacher, 'ko');
         });
 
         allRooms.forEach(({ deptName, room }) => {
@@ -279,50 +417,48 @@ document.addEventListener('DOMContentLoaded', () => {
             
             const matchedSubmission = submittedData.find(item => item.info && item.info.dept === deptName && item.info.room === room.name);
             const isSubmitted = !!matchedSubmission;
-            const statusBadge = isSubmitted ? '<span style="color:green;font-weight:bold;">✅ 제출됨</span>' : '<span style="color:red;">❌ 미제출</span>';
 
-            // 부장 결재 상태 UI 처리
-            let approvalCellHtml = '';
-            if (adminApprovalMode === 'bulk') {
-                if (isSubmitted) {
-                    const hasSig = matchedSubmission.adminSignature || adminBulkSignatureDataUrl;
-                    approvalCellHtml = hasSig 
-                        ? '<span class="badge badge-success">✅ 일괄결재됨</span>' 
-                        : '<span class="badge badge-warning">결재 대기</span>';
-                } else {
-                    approvalCellHtml = '<span class="badge badge-danger" style="opacity: 0.5;">미제출</span>';
-                }
+            // 제출여부 및 결재 버튼 통합 처리
+            let statusCellHtml = '';
+            if (!isSubmitted) {
+                statusCellHtml = '<span style="color:var(--danger-color);font-weight:bold;">❌ 미제출</span>';
             } else {
-                if (isSubmitted) {
+                if (adminApprovalMode === 'bulk') {
+                    const hasSig = matchedSubmission.adminSignature || adminBulkSignatureDataUrl;
+                    statusCellHtml = hasSig 
+                        ? '<span class="badge badge-success">✅ 일괄결재됨</span>' 
+                        : '<div style="display:flex;flex-direction:column;align-items:center;gap:0.15rem;"><span style="color:var(--success-color);font-weight:bold;">✅ 제출됨</span><span class="badge badge-warning" style="font-size:0.7rem;padding:0.1rem 0.3rem;">결재 대기</span></div>';
+                } else {
+                    // 개별결재 모드
                     const hasSig = matchedSubmission.adminSignature;
                     if (hasSig) {
-                        approvalCellHtml = `
-                            <div style="display:flex; flex-direction:column; align-items:center; gap:0.25rem;">
-                                <img src="${hasSig}" style="height:28px; border:1px solid #cbd5e1; border-radius:4px; background:white; padding:1px;" />
-                                <button class="btn btn-outline" type="button" style="padding: 0.1rem 0.4rem; font-size: 0.7rem; border-color: var(--danger-color); color: var(--danger-color);" onclick="window.deleteIndividualApproval('${deptName}', '${room.name}')">결재취소</button>
+                        statusCellHtml = `
+                            <div style="display:flex; flex-direction:column; align-items:center; gap:0.2rem;">
+                                <img src="${hasSig}" style="height:24px; border:1px solid #cbd5e1; border-radius:4px; background:white; padding:1px;" />
+                                <button class="btn btn-outline" type="button" style="padding: 0.1rem 0.3rem !important; font-size: 0.7rem !important; border-color: var(--danger-color); color: var(--danger-color);" onclick="window.deleteIndividualApproval('${deptName}', '${room.name}')">결재취소</button>
                             </div>
                         `;
                     } else {
-                        approvalCellHtml = `
-                            <button class="btn btn-primary" type="button" style="padding: 0.25rem 0.5rem; font-size: 0.8rem;" onclick="window.openIndividualApprovalModal('${deptName}', '${room.name}')">✍️ 결재하기</button>
+                        statusCellHtml = `
+                            <div style="display:flex; flex-direction:column; align-items:center; gap:0.2rem;">
+                                <span style="color:var(--success-color);font-weight:bold; font-size:0.75rem;">✅ 제출됨</span>
+                                <button class="btn btn-primary" type="button" style="padding: 0.15rem 0.35rem !important; font-size: 0.75rem !important;" onclick="window.openIndividualApprovalModal('${deptName}', '${room.name}')">✍️ 결재하기</button>
+                            </div>
                         `;
                     }
-                } else {
-                    approvalCellHtml = '<span class="badge badge-danger" style="opacity: 0.5;">결재 불가</span>';
                 }
             }
 
             const tr = document.createElement('tr');
             tr.innerHTML = `
-                <td style="border: 1px solid var(--border-color); padding: 0.75rem; text-align:center;">${statusBadge}</td>
-                <td style="border: 1px solid var(--border-color); padding: 0.75rem;">${deptName}</td>
-                <td style="border: 1px solid var(--border-color); padding: 0.75rem;"><strong>${room.name}</strong></td>
-                <td style="border: 1px solid var(--border-color); padding: 0.75rem;">${room.teacher}</td>
-                <td style="border: 1px solid var(--border-color); padding: 0.75rem; text-align:center;">${approvalCellHtml}</td>
-                <td style="border: 1px solid var(--border-color); padding: 0.75rem;">
-                    <div style="display:flex; gap:0.4rem; flex-wrap:wrap;">
-                        <button class="btn btn-primary" style="padding: 0.25rem 0.5rem; font-size: 0.8rem;" onclick="navigator.clipboard.writeText('${finalUrl}').then(() => {this.innerText='✅ 복사완료!'; setTimeout(()=>this.innerText='📋 복사하기',2000)})">📋 복사하기</button>
-                        <a href="${finalUrl}" target="_blank" class="btn btn-outline" style="padding: 0.25rem 0.5rem; font-size: 0.8rem; text-decoration:none; display:inline-flex; align-items:center;">🔗 열기</a>
+                <td style="text-align:center; vertical-align:middle;">${statusCellHtml}</td>
+                <td>${deptName}</td>
+                <td><strong>${room.name}</strong></td>
+                <td>${room.teacher}</td>
+                <td>
+                    <div style="display:flex; gap:0.25rem; justify-content:center;">
+                        <button class="btn btn-primary" style="padding: 0.2rem 0.4rem;" onclick="navigator.clipboard.writeText('${finalUrl}').then(() => {this.innerText='✅ 완료'; setTimeout(()=>this.innerText='📋 복사',1500)})">📋 복사</button>
+                        <a href="${finalUrl}" target="_blank" class="btn btn-outline" style="padding: 0.2rem 0.4rem; text-decoration:none; display:inline-flex; align-items:center;">🔗 열기</a>
                     </div>
                 </td>
             `;
@@ -539,13 +675,6 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
 
-    const adminBulkCanvas = document.getElementById('adminBulkSignaturePad');
-    if (adminBulkCanvas) {
-        initSignaturePad(adminBulkCanvas, elements.btnClearAdminBulkSignature, () => {
-            adminBulkSignatureDataUrl = null;
-        });
-    }
-
     const adminIndivCanvas = document.getElementById('adminIndivSignaturePad');
     if (adminIndivCanvas) {
         initSignaturePad(adminIndivCanvas, elements.btnClearAdminIndivSignature);
@@ -732,104 +861,6 @@ document.addEventListener('DOMContentLoaded', () => {
     if (elements.btnPrintFromPreview) {
         elements.btnPrintFromPreview.addEventListener('click', () => {
             window.print();
-        });
-    }
-
-    // ✍️ 학과부장 결재 방식 선택 제어
-    if (elements.adminApprovalModeRadios) {
-        elements.adminApprovalModeRadios.forEach(radio => {
-            radio.addEventListener('change', (e) => {
-                adminApprovalMode = e.target.value;
-                if (adminApprovalMode === 'bulk') {
-                    elements.adminBulkPadArea.style.display = 'block';
-                    elements.adminIndivGuidance.style.display = 'none';
-                } else {
-                    elements.adminBulkPadArea.style.display = 'none';
-                    elements.adminIndivGuidance.style.display = 'block';
-                }
-                generateAdminLinks();
-            });
-        });
-    }
-
-    // 💾 일괄 결재 서명 저장
-    if (elements.btnSaveAdminBulkSignature) {
-        elements.btnSaveAdminBulkSignature.addEventListener('click', async () => {
-            const m = elements.monthSelect.value;
-            const d = elements.dayInput.value;
-            if (!m || !d) {
-                alert('점검 월과 일을 선택해 주세요.');
-                return;
-            }
-            if (!window.currentSubmittedData || window.currentSubmittedData.length === 0) {
-                alert('제출 완료된 실습실 점검표가 없습니다. 제출 후에 결재해 주세요.');
-                return;
-            }
-
-            const bulkCanvas = document.getElementById('adminBulkSignaturePad');
-            if (bulkCanvas) {
-                const ctx = bulkCanvas.getContext('2d');
-                const buffer = new Uint32Array(ctx.getImageData(0, 0, bulkCanvas.width, bulkCanvas.height).data.buffer);
-                const hasSignature = buffer.some(color => color !== 0);
-                
-                if (!hasSignature) {
-                    alert('서명 패드에 서명을 그려주세요.');
-                    return;
-                }
-                
-                adminBulkSignatureDataUrl = bulkCanvas.toDataURL("image/png");
-            }
-
-            try {
-                if (window.firebaseDB) {
-                    await window.firebaseDB.saveAdminBulkApproval(m, d, window.currentSubmittedData, adminBulkSignatureDataUrl);
-                    alert('일괄 결재 서명이 저장되었습니다.');
-                    
-                    bulkCanvas.style.display = 'none';
-                    elements.btnClearAdminBulkSignature.style.display = 'none';
-                    elements.btnSaveAdminBulkSignature.style.display = 'none';
-                    elements.btnDeleteAdminBulkSignature.style.display = 'inline-flex';
-                    elements.adminBulkSavedBadge.style.display = 'block';
-                    
-                    generateAdminLinks();
-                }
-            } catch (err) {
-                console.error("일괄 결재 저장 에러:", err);
-                alert('일괄 결재 저장 중 에러가 발생했습니다.');
-            }
-        });
-    }
-
-    // ❌ 일괄 결재 서명 취소
-    if (elements.btnDeleteAdminBulkSignature) {
-        elements.btnDeleteAdminBulkSignature.addEventListener('click', async () => {
-            const m = elements.monthSelect.value;
-            const d = elements.dayInput.value;
-            if (!confirm('정말로 일괄 결재를 취소하시겠습니까?')) return;
-
-            try {
-                if (window.firebaseDB) {
-                    await window.firebaseDB.deleteAdminBulkApproval(m, d, window.currentSubmittedData);
-                    alert('일괄 결재가 취소되었습니다.');
-                    
-                    adminBulkSignatureDataUrl = null;
-                    const bulkCanvas = document.getElementById('adminBulkSignaturePad');
-                    if (bulkCanvas) {
-                        const ctx = bulkCanvas.getContext('2d');
-                        ctx.clearRect(0, 0, bulkCanvas.width, bulkCanvas.height);
-                        bulkCanvas.style.display = 'block';
-                    }
-                    elements.btnClearAdminBulkSignature.style.display = 'inline-flex';
-                    elements.btnSaveAdminBulkSignature.style.display = 'inline-flex';
-                    elements.btnDeleteAdminBulkSignature.style.display = 'none';
-                    elements.adminBulkSavedBadge.style.display = 'none';
-                    
-                    generateAdminLinks();
-                }
-            } catch (err) {
-                console.error("일괄 결재 취소 에러:", err);
-                alert('일괄 결재 취소 중 에러가 발생했습니다.');
-            }
         });
     }
 

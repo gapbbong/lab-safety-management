@@ -565,3 +565,47 @@ input[type="radio"] {
     margin-right: 0.25rem;
 }
 
+/* ─────────────────────────────────────────────
+   현황판 테이블 글자 한 줄 처리 및 너비 최적화
+   ───────────────────────────────────────────── */
+.link-table {
+    table-layout: fixed;
+    width: 100%;
+}
+
+.link-table th, 
+.link-table td {
+    padding: 0.6rem 0.4rem !important;
+    white-space: nowrap !important;
+    overflow: hidden !important;
+    text-overflow: ellipsis !important;
+    letter-spacing: -0.04em !important;
+    font-size: 0.85rem !important;
+    text-align: center;
+    border: 1px solid var(--border-color);
+    vertical-align: middle;
+}
+
+.link-table td strong {
+    font-weight: 700;
+}
+
+/* 실습실 명 등 텍스트 정렬 */
+.link-table td:nth-child(3) {
+    text-align: left;
+    padding-left: 0.6rem !important;
+}
+
+/* 버튼 폰트 및 패딩 압축 */
+.link-table .btn {
+    padding: 0.25rem 0.5rem !important;
+    font-size: 0.75rem !important;
+    white-space: nowrap;
+}
+
+/* 테이블 컨테이너 가로 스크롤 및 둥글기 */
+.table-container {
+    margin-top: 1rem;
+    background-color: var(--card-bg);
+}
+

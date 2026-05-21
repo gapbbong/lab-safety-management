@@ -96,56 +96,26 @@
           </div>
         </div>
         
-        <!-- 학과부장 결재 관리 섹션 -->
-        <div class="admin-approval-section" style="margin-bottom: 1.5rem; padding: 1.25rem; background-color: var(--bg-color); border-radius: 8px; border: 1px solid var(--border-color);">
-          <h3 style="font-size: 1.1rem; font-weight: 700; display: flex; align-items: center; gap: 0.5rem;">✍️ 학과부장 결재 관리</h3>
-          <div class="approval-mode-select" style="margin: 0.75rem 0; display: flex; gap: 1.5rem; flex-wrap: wrap;">
-            <label style="display: flex; align-items: center; gap: 0.5rem; cursor: pointer; font-size: 0.9rem; font-weight: 600;">
-              <input type="radio" name="adminApprovalMode" value="bulk" checked> 모든 실습실에 동일한 서명 일괄 적용
-            </label>
-            <label style="display: flex; align-items: center; gap: 0.5rem; cursor: pointer; font-size: 0.9rem; font-weight: 600;">
-              <input type="radio" name="adminApprovalMode" value="individual"> 실습실별 개별 서명 적용
-            </label>
-          </div>
-          
-          <!-- 일괄 결재 서명 패드 영역 -->
-          <div id="adminBulkPadArea" style="margin-top: 1rem; border-top: 1px dashed var(--border-color); padding-top: 1rem;">
-            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.5rem; flex-wrap: wrap; gap: 0.5rem;">
-              <span style="font-size: 0.85rem; color: var(--text-muted);">여기에 그린 서명이 모든 제출 완료된 점검표에 일괄 적용됩니다.</span>
-              <div style="display:flex; gap:0.5rem;">
-                <button class="btn btn-outline" id="btnClearAdminBulkSignature" type="button" style="padding: 0.25rem 0.5rem; font-size: 0.8rem;">지우기</button>
-                <button class="btn btn-primary" id="btnSaveAdminBulkSignature" type="button" style="padding: 0.25rem 0.5rem; font-size: 0.8rem; background-color: var(--success-color); color: white;">💾 결재 서명 저장</button>
-                <button class="btn btn-secondary" id="btnDeleteAdminBulkSignature" type="button" style="padding: 0.25rem 0.5rem; font-size: 0.8rem; background-color: var(--danger-color); color: white; display:none;">❌ 결재 취소</button>
-              </div>
-            </div>
-            <div style="display: flex; align-items: center; justify-content: center; gap: 2rem; flex-wrap: wrap;">
-              <canvas id="adminBulkSignaturePad" width="300" height="120" style="background: white; border: 1px solid #cbd5e1; border-radius: 4px; touch-action: none;"></canvas>
-              <div id="adminBulkSavedBadge" style="display:none; text-align:center;">
-                <span class="badge badge-success" style="font-size: 0.9rem; padding: 0.5rem 1rem;">✅ 일괄 결재 서명 저장됨</span>
-              </div>
-            </div>
-          </div>
-          
-          <!-- 개별 결재 모드 안내 문구 -->
-          <div id="adminIndivGuidance" style="display: none; margin-top: 0.5rem; padding-top: 0.5rem; border-top: 1px dashed var(--border-color); font-size: 0.85rem; color: var(--text-muted);">
-            💡 아래 현황판 목록에서 제출이 완료된 실습실 옆의 <strong>[결재하기]</strong> 버튼을 눌러 개별 서명을 입력해주세요.
-          </div>
+        <!-- 안내 문구 및 표 -->
+        <div id="tableGuidance" style="font-size: 0.85rem; color: var(--text-muted); margin: 1rem 0 0.5rem 0; font-weight: 600;">
+          💡 담당교사 이름순(가나다순)으로 정렬되어 있습니다.
         </div>
         
-        <table class="link-table" style="width: 100%; border-collapse: collapse; margin-top: 1rem;">
-          <thead>
-            <tr>
-              <th style="border: 1px solid var(--border-color); padding: 0.75rem; background-color: var(--bg-color); width: 80px;">제출여부</th>
-              <th style="border: 1px solid var(--border-color); padding: 0.75rem; background-color: var(--bg-color);">학과</th>
-              <th style="border: 1px solid var(--border-color); padding: 0.75rem; background-color: var(--bg-color);">실습실</th>
-              <th style="border: 1px solid var(--border-color); padding: 0.75rem; background-color: var(--bg-color);">담당교사</th>
-              <th style="border: 1px solid var(--border-color); padding: 0.75rem; background-color: var(--bg-color); width: 160px;">부장결재</th>
-              <th style="border: 1px solid var(--border-color); padding: 0.75rem; background-color: var(--bg-color); width: 160px;">링크 복사</th>
-            </tr>
-          </thead>
-          <tbody id="linksBody">
-          </tbody>
-        </table>
+        <div class="table-container" style="width: 100%; overflow-x: auto; -webkit-overflow-scrolling: touch; border: 1px solid var(--border-color); border-radius: 8px;">
+          <table class="link-table" style="width: 100%; min-width: 860px; border-collapse: collapse; table-layout: fixed; border: none;">
+            <thead>
+              <tr>
+                <th style="border: 1px solid var(--border-color); padding: 0.6rem; background-color: var(--bg-color); width: 120px;">제출여부</th>
+                <th style="border: 1px solid var(--border-color); padding: 0.6rem; background-color: var(--bg-color); width: 110px;">학과</th>
+                <th style="border: 1px solid var(--border-color); padding: 0.6rem; background-color: var(--bg-color); width: 220px;">실습실</th>
+                <th style="border: 1px solid var(--border-color); padding: 0.6rem; background-color: var(--bg-color); width: 90px;">담당교사</th>
+                <th style="border: 1px solid var(--border-color); padding: 0.6rem; background-color: var(--bg-color); width: 320px;">링크 복사</th>
+              </tr>
+            </thead>
+            <tbody id="linksBody">
+            </tbody>
+          </table>
+        </div>
       </div>
     </section>
 
