@@ -96,6 +96,42 @@
           </div>
         </div>
         
+        <!-- 학과부장 결재 관리 섹션 -->
+        <div class="admin-approval-section" style="margin-bottom: 1.5rem; padding: 1.25rem; background-color: var(--bg-color); border-radius: 8px; border: 1px solid var(--border-color);">
+          <h3 style="font-size: 1.1rem; font-weight: 700; display: flex; align-items: center; gap: 0.5rem;">✍️ 학과부장 결재 관리</h3>
+          <div class="approval-mode-select" style="margin: 0.75rem 0; display: flex; gap: 1.5rem; flex-wrap: wrap;">
+            <label style="display: flex; align-items: center; gap: 0.5rem; cursor: pointer; font-size: 0.9rem; font-weight: 600;">
+              <input type="radio" name="adminApprovalMode" value="bulk" checked> 모든 실습실에 동일한 서명 일괄 적용
+            </label>
+            <label style="display: flex; align-items: center; gap: 0.5rem; cursor: pointer; font-size: 0.9rem; font-weight: 600;">
+              <input type="radio" name="adminApprovalMode" value="individual"> 실습실별 개별 서명 적용
+            </label>
+          </div>
+          
+          <!-- 일괄 결재 서명 패드 영역 -->
+          <div id="adminBulkPadArea" style="margin-top: 1rem; border-top: 1px dashed var(--border-color); padding-top: 1rem;">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.5rem; flex-wrap: wrap; gap: 0.5rem;">
+              <span style="font-size: 0.85rem; color: var(--text-muted);">여기에 그린 서명이 모든 제출 완료된 점검표에 일괄 적용됩니다.</span>
+              <div style="display:flex; gap:0.5rem;">
+                <button class="btn btn-outline" id="btnClearAdminBulkSignature" type="button" style="padding: 0.25rem 0.5rem; font-size: 0.8rem;">지우기</button>
+                <button class="btn btn-primary" id="btnSaveAdminBulkSignature" type="button" style="padding: 0.25rem 0.5rem; font-size: 0.8rem; background-color: var(--success-color); color: white;">💾 결재 서명 저장</button>
+                <button class="btn btn-secondary" id="btnDeleteAdminBulkSignature" type="button" style="padding: 0.25rem 0.5rem; font-size: 0.8rem; background-color: var(--danger-color); color: white; display:none;">❌ 결재 취소</button>
+              </div>
+            </div>
+            <div style="display: flex; align-items: center; justify-content: center; gap: 2rem; flex-wrap: wrap;">
+              <canvas id="adminBulkSignaturePad" width="300" height="120" style="background: white; border: 1px solid #cbd5e1; border-radius: 4px; touch-action: none;"></canvas>
+              <div id="adminBulkSavedBadge" style="display:none; text-align:center;">
+                <span class="badge badge-success" style="font-size: 0.9rem; padding: 0.5rem 1rem;">✅ 일괄 결재 서명 저장됨</span>
+              </div>
+            </div>
+          </div>
+          
+          <!-- 개별 결재 모드 안내 문구 -->
+          <div id="adminIndivGuidance" style="display: none; margin-top: 0.5rem; padding-top: 0.5rem; border-top: 1px dashed var(--border-color); font-size: 0.85rem; color: var(--text-muted);">
+            💡 아래 현황판 목록에서 제출이 완료된 실습실 옆의 <strong>[결재하기]</strong> 버튼을 눌러 개별 서명을 입력해주세요.
+          </div>
+        </div>
+        
         <table class="link-table" style="width: 100%; border-collapse: collapse; margin-top: 1rem;">
           <thead>
             <tr>
@@ -103,7 +139,8 @@
               <th style="border: 1px solid var(--border-color); padding: 0.75rem; background-color: var(--bg-color);">학과</th>
               <th style="border: 1px solid var(--border-color); padding: 0.75rem; background-color: var(--bg-color);">실습실</th>
               <th style="border: 1px solid var(--border-color); padding: 0.75rem; background-color: var(--bg-color);">담당교사</th>
-              <th style="border: 1px solid var(--border-color); padding: 0.75rem; background-color: var(--bg-color);">링크 복사</th>
+              <th style="border: 1px solid var(--border-color); padding: 0.75rem; background-color: var(--bg-color); width: 160px;">부장결재</th>
+              <th style="border: 1px solid var(--border-color); padding: 0.75rem; background-color: var(--bg-color); width: 160px;">링크 복사</th>
             </tr>
           </thead>
           <tbody id="linksBody">
@@ -139,7 +176,10 @@
         <div class="signature-section" style="margin-top: 2rem; padding: 1.5rem; background-color: var(--bg-color); border-radius: 8px; border: 1px solid var(--border-color);">
           <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.5rem;">
             <h3 style="font-size: 1rem; color: var(--text-main);">✍️ 담당교사 서명</h3>
-            <button class="btn btn-outline" id="btnClearSignature" style="padding: 0.25rem 0.75rem; font-size: 0.875rem;">지우기</button>
+            <div style="display: flex; flex-direction: column; gap: 0.4rem;">
+              <button class="btn btn-outline" id="btnClearSignature" style="padding: 0.25rem 0.75rem; font-size: 0.875rem;" type="button">지우기</button>
+              <button class="btn btn-outline" id="btnPreviewSignature" style="padding: 0.25rem 0.75rem; font-size: 0.875rem; border-color: var(--primary-color); color: var(--primary-color);" type="button">🔍 미리보기</button>
+            </div>
           </div>
           <canvas id="signaturePad" width="300" height="150" style="background: white; border: 1px solid #cbd5e1; border-radius: 4px; touch-action: none; display: block; margin: 0 auto;"></canvas>
           <p style="text-align: center; font-size: 0.8rem; color: var(--text-muted); margin-top: 0.5rem;">위 박스 안에 마우스나 터치로 서명해주세요.</p>
@@ -171,6 +211,44 @@
 
     <!-- 인쇄용 레이아웃 (화면에서는 숨김) -->
     <div id="printArea" class="print-area"></div>
+  </div>
+
+  <!-- 미리보기 모달 -->
+  <div id="previewModal" class="modal hidden">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h3>📋 안전점검표 인쇄 미리보기</h3>
+        <button class="close-modal" id="btnClosePreview">&times;</button>
+      </div>
+      <div class="modal-body" id="previewModalBody" style="text-align: center;">
+        <!-- 렌더링된 인쇄 레이아웃 이미지가 들어갈 예정 -->
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-success" id="btnPrintFromPreview">🖨️ 바로 인쇄</button>
+        <button class="btn btn-secondary" id="btnClosePreviewBottom">닫기</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- 학과부장 개별 결재 모달 -->
+  <div id="adminApprovalModal" class="modal hidden">
+    <div class="modal-content" style="max-width: 400px;">
+      <div class="modal-header">
+        <h3 id="adminApprovalModalTitle">✍️ 실습실 결재</h3>
+        <button class="close-modal" id="btnCloseAdminApproval">&times;</button>
+      </div>
+      <div class="modal-body" style="background-color: var(--bg-color);">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.5rem;">
+          <span style="font-size: 0.9rem; color: var(--text-muted);">부장 서명을 아래 패드에 그려주세요.</span>
+          <button class="btn btn-outline" id="btnClearAdminIndivSignature" style="padding: 0.25rem 0.75rem; font-size: 0.875rem;" type="button">지우기</button>
+        </div>
+        <canvas id="adminIndivSignaturePad" width="300" height="150" style="background: white; border: 1px solid #cbd5e1; border-radius: 4px; touch-action: none; display: block; margin: 0 auto;"></canvas>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-success" id="btnSaveAdminApproval">💾 결재 저장</button>
+        <button class="btn btn-outline" id="btnCloseAdminApprovalBottom">취소</button>
+      </div>
+    </div>
   </div>
 
   <!-- Firebase SDK -->

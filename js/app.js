@@ -32,16 +32,43 @@ document.addEventListener('DOMContentLoaded', () => {
         btnNewCheck: document.getElementById('btnNewCheck'),
         btnPrintDone: document.getElementById('btnPrintDone'),
         
-        printArea: document.getElementById('printArea')
+        printArea: document.getElementById('printArea'),
+
+        // 미리보기 모달 엘리먼트 추가
+        btnPreviewSignature: document.getElementById('btnPreviewSignature'),
+        previewModal: document.getElementById('previewModal'),
+        previewModalBody: document.getElementById('previewModalBody'),
+        btnClosePreview: document.getElementById('btnClosePreview'),
+        btnClosePreviewBottom: document.getElementById('btnClosePreviewBottom'),
+        btnPrintFromPreview: document.getElementById('btnPrintFromPreview'),
+
+        // 관리자 결재 설정 관련 엘리먼트 추가
+        adminApprovalModeRadios: document.getElementsByName('adminApprovalMode'),
+        adminBulkPadArea: document.getElementById('adminBulkPadArea'),
+        adminIndivGuidance: document.getElementById('adminIndivGuidance'),
+        btnClearAdminBulkSignature: document.getElementById('btnClearAdminBulkSignature'),
+        btnSaveAdminBulkSignature: document.getElementById('btnSaveAdminBulkSignature'),
+        btnDeleteAdminBulkSignature: document.getElementById('btnDeleteAdminBulkSignature'),
+        adminBulkSavedBadge: document.getElementById('adminBulkSavedBadge'),
+        
+        // 개별 결재 모달 엘리먼트 추가
+        adminApprovalModal: document.getElementById('adminApprovalModal'),
+        adminApprovalModalTitle: document.getElementById('adminApprovalModalTitle'),
+        btnCloseAdminApproval: document.getElementById('btnCloseAdminApproval'),
+        btnCloseAdminApprovalBottom: document.getElementById('btnCloseAdminApprovalBottom'),
+        btnClearAdminIndivSignature: document.getElementById('btnClearAdminIndivSignature'),
+        btnSaveAdminApproval: document.getElementById('btnSaveAdminApproval')
     };
 
     let currentChecklistState = {};
     let currentInfo = {};
     let isAdminMode = true;
     let signatureDataUrl = null;
-    let adminSignatureDataUrl = null;
-    let isDrawing = false;
-    let isAdminDrawing = false;
+
+    // 부장 결재 관리 상태 변수
+    let adminApprovalMode = 'bulk'; // 'bulk' 또는 'individual'
+    let adminBulkSignatureDataUrl = null; // 일괄 결재 서명 이미지
+    let currentApprovingLab = null; // 현재 개별 결재 팝업이 띄워진 실습실 정보 ({ dept, room })
 
     // Step 1: Initialize Department Dropdown based on data.js
     function initDepartments() {
@@ -196,7 +223,7 @@ document.addEventListener('DOMContentLoaded', () => {
         const linksCard = document.getElementById('linksCard');
         const linksBody = document.getElementById('linksBody');
         
-        linksBody.innerHTML = '<tr><td colspan="5" style="padding:1rem; text-align:center;">데이터를 불러오는 중입니다...</td></tr>';
+        linksBody.innerHTML = '<tr><td colspan="6" style="padding:1rem; text-align:center;">데이터를 불러오는 중입니다...</td></tr>';
         linksCard.classList.remove('hidden');
 
         let submittedData = [];
@@ -207,6 +234,26 @@ document.addEventListener('DOMContentLoaded', () => {
         } catch (e) {
             console.error('Firebase 로드 실패', e);
         }
+
+        // ── 부장 일괄 결재 서명 복구 로직 ───────────────────────
+        const savedApproval = submittedData.find(item => item.adminSignature);
+        if (savedApproval && adminApprovalMode === 'bulk') {
+            adminBulkSignatureDataUrl = savedApproval.adminSignature;
+            
+            document.getElementById('adminBulkSignaturePad').style.display = 'none';
+            elements.btnClearAdminBulkSignature.style.display = 'none';
+            elements.btnSaveAdminBulkSignature.style.display = 'none';
+            elements.btnDeleteAdminBulkSignature.style.display = 'inline-flex';
+            elements.adminBulkSavedBadge.style.display = 'block';
+        } else if (adminApprovalMode === 'bulk' && !savedApproval) {
+            adminBulkSignatureDataUrl = null;
+            document.getElementById('adminBulkSignaturePad').style.display = 'block';
+            elements.btnClearAdminBulkSignature.style.display = 'inline-flex';
+            elements.btnSaveAdminBulkSignature.style.display = 'inline-flex';
+            elements.btnDeleteAdminBulkSignature.style.display = 'none';
+            elements.adminBulkSavedBadge.style.display = 'none';
+        }
+        // ───────────────────────────────────────────────────────
         
         linksBody.innerHTML = '';
         const baseUrl = window.location.href.split('?')[0];
@@ -230,8 +277,40 @@ document.addEventListener('DOMContentLoaded', () => {
             const params = new URLSearchParams({ m, d, dept: deptName, room: room.name });
             const finalUrl = `${baseUrl}?${params.toString()}`;
             
-            const isSubmitted = submittedData.some(item => item.info && item.info.dept === deptName && item.info.room === room.name);
+            const matchedSubmission = submittedData.find(item => item.info && item.info.dept === deptName && item.info.room === room.name);
+            const isSubmitted = !!matchedSubmission;
             const statusBadge = isSubmitted ? '<span style="color:green;font-weight:bold;">✅ 제출됨</span>' : '<span style="color:red;">❌ 미제출</span>';
+
+            // 부장 결재 상태 UI 처리
+            let approvalCellHtml = '';
+            if (adminApprovalMode === 'bulk') {
+                if (isSubmitted) {
+                    const hasSig = matchedSubmission.adminSignature || adminBulkSignatureDataUrl;
+                    approvalCellHtml = hasSig 
+                        ? '<span class="badge badge-success">✅ 일괄결재됨</span>' 
+                        : '<span class="badge badge-warning">결재 대기</span>';
+                } else {
+                    approvalCellHtml = '<span class="badge badge-danger" style="opacity: 0.5;">미제출</span>';
+                }
+            } else {
+                if (isSubmitted) {
+                    const hasSig = matchedSubmission.adminSignature;
+                    if (hasSig) {
+                        approvalCellHtml = `
+                            <div style="display:flex; flex-direction:column; align-items:center; gap:0.25rem;">
+                                <img src="${hasSig}" style="height:28px; border:1px solid #cbd5e1; border-radius:4px; background:white; padding:1px;" />
+                                <button class="btn btn-outline" type="button" style="padding: 0.1rem 0.4rem; font-size: 0.7rem; border-color: var(--danger-color); color: var(--danger-color);" onclick="window.deleteIndividualApproval('${deptName}', '${room.name}')">결재취소</button>
+                            </div>
+                        `;
+                    } else {
+                        approvalCellHtml = `
+                            <button class="btn btn-primary" type="button" style="padding: 0.25rem 0.5rem; font-size: 0.8rem;" onclick="window.openIndividualApprovalModal('${deptName}', '${room.name}')">✍️ 결재하기</button>
+                        `;
+                    }
+                } else {
+                    approvalCellHtml = '<span class="badge badge-danger" style="opacity: 0.5;">결재 불가</span>';
+                }
+            }
 
             const tr = document.createElement('tr');
             tr.innerHTML = `
@@ -239,6 +318,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 <td style="border: 1px solid var(--border-color); padding: 0.75rem;">${deptName}</td>
                 <td style="border: 1px solid var(--border-color); padding: 0.75rem;"><strong>${room.name}</strong></td>
                 <td style="border: 1px solid var(--border-color); padding: 0.75rem;">${room.teacher}</td>
+                <td style="border: 1px solid var(--border-color); padding: 0.75rem; text-align:center;">${approvalCellHtml}</td>
                 <td style="border: 1px solid var(--border-color); padding: 0.75rem;">
                     <div style="display:flex; gap:0.4rem; flex-wrap:wrap;">
                         <button class="btn btn-primary" style="padding: 0.25rem 0.5rem; font-size: 0.8rem;" onclick="navigator.clipboard.writeText('${finalUrl}').then(() => {this.innerText='✅ 복사완료!'; setTimeout(()=>this.innerText='📋 복사하기',2000)})">📋 복사하기</button>
@@ -347,17 +427,16 @@ document.addEventListener('DOMContentLoaded', () => {
         };
     }
 
-    // Signature Pad Logic
-    const canvas = document.getElementById('signaturePad');
-    if (canvas) {
-        const ctx = canvas.getContext('2d');
-        const btnClearSignature = document.getElementById('btnClearSignature');
+    // ── 서명 드로잉 패드 초기화 헬퍼 함수 ────────────────
+    function initSignaturePad(canvasEl, clearBtnEl, onClear = null) {
+        if (!canvasEl) return null;
+        const ctx = canvasEl.getContext('2d');
+        ctx.clearRect(0, 0, canvasEl.width, canvasEl.height);
         
-        // Remove white background so it's transparent
-        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        let drawing = false;
         
         function getPointerPos(e) {
-            const rect = canvas.getBoundingClientRect();
+            const rect = canvasEl.getBoundingClientRect();
             const clientX = e.touches ? e.touches[0].clientX : e.clientX;
             const clientY = e.touches ? e.touches[0].clientY : e.clientY;
             return {
@@ -368,14 +447,14 @@ document.addEventListener('DOMContentLoaded', () => {
         
         function startDrawing(e) {
             e.preventDefault();
-            isDrawing = true;
+            drawing = true;
             const pos = getPointerPos(e);
             ctx.beginPath();
             ctx.moveTo(pos.x, pos.y);
         }
         
         function draw(e) {
-            if (!isDrawing) return;
+            if (!drawing) return;
             e.preventDefault();
             const pos = getPointerPos(e);
             ctx.lineTo(pos.x, pos.y);
@@ -386,26 +465,52 @@ document.addEventListener('DOMContentLoaded', () => {
         }
         
         function stopDrawing() {
-            if (!isDrawing) return;
-            isDrawing = false;
+            if (!drawing) return;
+            drawing = false;
             ctx.closePath();
         }
         
-        canvas.addEventListener('mousedown', startDrawing);
-        canvas.addEventListener('mousemove', draw);
-        canvas.addEventListener('mouseup', stopDrawing);
-        canvas.addEventListener('mouseout', stopDrawing);
-        canvas.addEventListener('touchstart', startDrawing, { passive: false });
-        canvas.addEventListener('touchmove', draw, { passive: false });
-        canvas.addEventListener('touchend', stopDrawing);
+        canvasEl.addEventListener('mousedown', startDrawing);
+        canvasEl.addEventListener('mousemove', draw);
+        canvasEl.addEventListener('mouseup', stopDrawing);
+        canvasEl.addEventListener('mouseout', stopDrawing);
+        canvasEl.addEventListener('touchstart', startDrawing, { passive: false });
+        canvasEl.addEventListener('touchmove', draw, { passive: false });
+        canvasEl.addEventListener('touchend', stopDrawing);
         
-        btnClearSignature.addEventListener('click', () => {
-            ctx.clearRect(0, 0, canvas.width, canvas.height);
+        if (clearBtnEl) {
+            clearBtnEl.addEventListener('click', () => {
+                ctx.clearRect(0, 0, canvasEl.width, canvasEl.height);
+                if (onClear) onClear();
+            });
+        }
+        
+        return {
+            canvas: canvasEl,
+            ctx: ctx,
+            clear: () => ctx.clearRect(0, 0, canvasEl.width, canvasEl.height)
+        };
+    }
+
+    // 각 서명 패드 초기화
+    const canvas = document.getElementById('signaturePad');
+    if (canvas) {
+        initSignaturePad(canvas, document.getElementById('btnClearSignature'), () => {
             signatureDataUrl = null;
         });
     }
 
-    // Admin Signature Pad Logic 삭제됨
+    const adminBulkCanvas = document.getElementById('adminBulkSignaturePad');
+    if (adminBulkCanvas) {
+        initSignaturePad(adminBulkCanvas, elements.btnClearAdminBulkSignature, () => {
+            adminBulkSignatureDataUrl = null;
+        });
+    }
+
+    const adminIndivCanvas = document.getElementById('adminIndivSignaturePad');
+    if (adminIndivCanvas) {
+        initSignaturePad(adminIndivCanvas, elements.btnClearAdminIndivSignature);
+    }
 
     // Update Progress
     function updateProgress() {
@@ -496,7 +601,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 signatureDataUrl = canvas.toDataURL("image/png");
             }
             elements.printArea.innerHTML = '';
-            await renderPrintLayout(getFinalData(), false);
+            await renderPrintLayout(getFinalData(), false, elements.printArea);
             window.print();
         });
     }
@@ -508,26 +613,43 @@ document.addEventListener('DOMContentLoaded', () => {
                 return;
             }
             
-            // 최지은 선생님 서명을 관리자 서명으로 사용
-            const headSubmission = window.currentSubmittedData.find(item => item.info && item.info.teacher === '최지은');
-            if (headSubmission && headSubmission.signature) {
-                adminSignatureDataUrl = headSubmission.signature;
+            let hasMissingSignature = false;
+            let confirmMsg = '';
+
+            if (adminApprovalMode === 'bulk') {
+                if (!adminBulkSignatureDataUrl) {
+                    hasMissingSignature = true;
+                    confirmMsg = '일괄 결재 서명이 저장되지 않았습니다.\n부장 결재 서명 없이 일괄 인쇄하시겠습니까?';
+                }
             } else {
-                adminSignatureDataUrl = null;
-                if (!confirm('최지은 선생님(부장님)의 점검표가 제출되지 않아 부장님 서명이 없습니다.\n서명 없이 일괄 인쇄하시겠습니까?')) {
+                // 개별 결재 모드일 때, 제출된 모든 문서 중 부장 서명이 하나라도 누락되었는지 체크
+                const incomplete = window.currentSubmittedData.some(doc => !doc.adminSignature);
+                if (incomplete) {
+                    hasMissingSignature = true;
+                    confirmMsg = '부장 결재가 완료되지 않은 실습실이 있습니다.\n일부 결재 서명 없이 일괄 인쇄하시겠습니까?';
+                }
+            }
+
+            if (hasMissingSignature) {
+                if (!confirm(confirmMsg)) {
                     return;
                 }
             }
 
             elements.printArea.innerHTML = '<p style="text-align:center;padding:30px;font-size:1rem;">🔄 전체 PDF 렌더링 중...</p>';
             
-            const tempDiv = document.createElement('div');
-            for (const data of window.currentSubmittedData) {
-                await renderPrintLayout(data, true, tempDiv);
+            try {
+                const tempDiv = document.createElement('div');
+                for (const data of window.currentSubmittedData) {
+                    await renderPrintLayout(data, true, tempDiv);
+                }
+                elements.printArea.innerHTML = '';
+                elements.printArea.appendChild(tempDiv);
+                window.print();
+            } catch (err) {
+                console.error("일괄 인쇄 렌더링 에러:", err);
+                alert('일괄 인쇄를 위한 PDF 렌더링 중 에러가 발생했습니다.');
             }
-            elements.printArea.innerHTML = '';
-            elements.printArea.appendChild(tempDiv);
-            window.print();
         });
     }
 
@@ -544,6 +666,211 @@ document.addEventListener('DOMContentLoaded', () => {
     elements.btnPrintDone.addEventListener('click', () => {
         window.print();
     });
+
+    // 🔍 교사용 미리보기 모달 제어
+    if (elements.btnPreviewSignature) {
+        elements.btnPreviewSignature.addEventListener('click', async () => {
+            if (canvas) {
+                signatureDataUrl = canvas.toDataURL("image/png");
+            }
+            elements.previewModalBody.innerHTML = '<p style="text-align:center;padding:30px;font-size:1rem;">🔄 미리보기 생성 중...</p>';
+            elements.previewModal.classList.remove('hidden');
+            
+            try {
+                await renderPrintLayout(getFinalData(), false, elements.previewModalBody);
+            } catch (err) {
+                console.error("미리보기 렌더링 실패:", err);
+                elements.previewModalBody.innerHTML = '<p style="text-align:center;padding:30px;color:red;">미리보기를 불러오지 못했습니다.</p>';
+            }
+        });
+    }
+
+    function closePreviewModal() {
+        elements.previewModal.classList.add('hidden');
+        elements.previewModalBody.innerHTML = '';
+    }
+
+    if (elements.btnClosePreview) elements.btnClosePreview.addEventListener('click', closePreviewModal);
+    if (elements.btnClosePreviewBottom) elements.btnClosePreviewBottom.addEventListener('click', closePreviewModal);
+    if (elements.btnPrintFromPreview) {
+        elements.btnPrintFromPreview.addEventListener('click', () => {
+            window.print();
+        });
+    }
+
+    // ✍️ 학과부장 결재 방식 선택 제어
+    if (elements.adminApprovalModeRadios) {
+        elements.adminApprovalModeRadios.forEach(radio => {
+            radio.addEventListener('change', (e) => {
+                adminApprovalMode = e.target.value;
+                if (adminApprovalMode === 'bulk') {
+                    elements.adminBulkPadArea.style.display = 'block';
+                    elements.adminIndivGuidance.style.display = 'none';
+                } else {
+                    elements.adminBulkPadArea.style.display = 'none';
+                    elements.adminIndivGuidance.style.display = 'block';
+                }
+                generateAdminLinks();
+            });
+        });
+    }
+
+    // 💾 일괄 결재 서명 저장
+    if (elements.btnSaveAdminBulkSignature) {
+        elements.btnSaveAdminBulkSignature.addEventListener('click', async () => {
+            const m = elements.monthSelect.value;
+            const d = elements.dayInput.value;
+            if (!m || !d) {
+                alert('점검 월과 일을 선택해 주세요.');
+                return;
+            }
+            if (!window.currentSubmittedData || window.currentSubmittedData.length === 0) {
+                alert('제출 완료된 실습실 점검표가 없습니다. 제출 후에 결재해 주세요.');
+                return;
+            }
+
+            const bulkCanvas = document.getElementById('adminBulkSignaturePad');
+            if (bulkCanvas) {
+                const ctx = bulkCanvas.getContext('2d');
+                const buffer = new Uint32Array(ctx.getImageData(0, 0, bulkCanvas.width, bulkCanvas.height).data.buffer);
+                const hasSignature = buffer.some(color => color !== 0);
+                
+                if (!hasSignature) {
+                    alert('서명 패드에 서명을 그려주세요.');
+                    return;
+                }
+                
+                adminBulkSignatureDataUrl = bulkCanvas.toDataURL("image/png");
+            }
+
+            try {
+                if (window.firebaseDB) {
+                    await window.firebaseDB.saveAdminBulkApproval(m, d, window.currentSubmittedData, adminBulkSignatureDataUrl);
+                    alert('일괄 결재 서명이 저장되었습니다.');
+                    
+                    bulkCanvas.style.display = 'none';
+                    elements.btnClearAdminBulkSignature.style.display = 'none';
+                    elements.btnSaveAdminBulkSignature.style.display = 'none';
+                    elements.btnDeleteAdminBulkSignature.style.display = 'inline-flex';
+                    elements.adminBulkSavedBadge.style.display = 'block';
+                    
+                    generateAdminLinks();
+                }
+            } catch (err) {
+                console.error("일괄 결재 저장 에러:", err);
+                alert('일괄 결재 저장 중 에러가 발생했습니다.');
+            }
+        });
+    }
+
+    // ❌ 일괄 결재 서명 취소
+    if (elements.btnDeleteAdminBulkSignature) {
+        elements.btnDeleteAdminBulkSignature.addEventListener('click', async () => {
+            const m = elements.monthSelect.value;
+            const d = elements.dayInput.value;
+            if (!confirm('정말로 일괄 결재를 취소하시겠습니까?')) return;
+
+            try {
+                if (window.firebaseDB) {
+                    await window.firebaseDB.deleteAdminBulkApproval(m, d, window.currentSubmittedData);
+                    alert('일괄 결재가 취소되었습니다.');
+                    
+                    adminBulkSignatureDataUrl = null;
+                    const bulkCanvas = document.getElementById('adminBulkSignaturePad');
+                    if (bulkCanvas) {
+                        const ctx = bulkCanvas.getContext('2d');
+                        ctx.clearRect(0, 0, bulkCanvas.width, bulkCanvas.height);
+                        bulkCanvas.style.display = 'block';
+                    }
+                    elements.btnClearAdminBulkSignature.style.display = 'inline-flex';
+                    elements.btnSaveAdminBulkSignature.style.display = 'inline-flex';
+                    elements.btnDeleteAdminBulkSignature.style.display = 'none';
+                    elements.adminBulkSavedBadge.style.display = 'none';
+                    
+                    generateAdminLinks();
+                }
+            } catch (err) {
+                console.error("일괄 결재 취소 에러:", err);
+                alert('일괄 결재 취소 중 에러가 발생했습니다.');
+            }
+        });
+    }
+
+    // ✍️ 개별 결재 모달 열기 (글로벌 바인딩)
+    window.openIndividualApprovalModal = function(dept, room) {
+        currentApprovingLab = { dept, room };
+        elements.adminApprovalModalTitle.textContent = `${room} 결재`;
+        
+        const indivCanvas = document.getElementById('adminIndivSignaturePad');
+        if (indivCanvas) {
+            const ctx = indivCanvas.getContext('2d');
+            ctx.clearRect(0, 0, indivCanvas.width, indivCanvas.height);
+        }
+        
+        elements.adminApprovalModal.classList.remove('hidden');
+    };
+
+    function closeAdminApprovalModal() {
+        elements.adminApprovalModal.classList.add('hidden');
+        currentApprovingLab = null;
+    }
+
+    if (elements.btnCloseAdminApproval) elements.btnCloseAdminApproval.addEventListener('click', closeAdminApprovalModal);
+    if (elements.btnCloseAdminApprovalBottom) elements.btnCloseAdminApprovalBottom.addEventListener('click', closeAdminApprovalModal);
+
+    // 💾 개별 결재 저장
+    if (elements.btnSaveAdminApproval) {
+        elements.btnSaveAdminApproval.addEventListener('click', async () => {
+            if (!currentApprovingLab) return;
+            const m = elements.monthSelect.value;
+            const d = elements.dayInput.value;
+            
+            const indivCanvas = document.getElementById('adminIndivSignaturePad');
+            let indivSig = null;
+            if (indivCanvas) {
+                const ctx = indivCanvas.getContext('2d');
+                const buffer = new Uint32Array(ctx.getImageData(0, 0, indivCanvas.width, indivCanvas.height).data.buffer);
+                const hasSignature = buffer.some(color => color !== 0);
+                
+                if (!hasSignature) {
+                    alert('서명 패드에 서명을 그려주세요.');
+                    return;
+                }
+                
+                indivSig = indivCanvas.toDataURL("image/png");
+            }
+
+            try {
+                if (window.firebaseDB) {
+                    await window.firebaseDB.saveAdminApproval(m, d, currentApprovingLab.dept, currentApprovingLab.room, indivSig);
+                    alert(`${currentApprovingLab.room} 결재가 완료되었습니다.`);
+                    closeAdminApprovalModal();
+                    generateAdminLinks();
+                }
+            } catch (err) {
+                console.error("개별 결재 저장 에러:", err);
+                alert('결재 저장 중 에러가 발생했습니다.');
+            }
+        });
+    }
+
+    // ❌ 개별 결재 취소 (글로벌 바인딩)
+    window.deleteIndividualApproval = async function(dept, room) {
+        if (!confirm(`${room}의 부장 결재를 취소하시겠습니까?`)) return;
+        const m = elements.monthSelect.value;
+        const d = elements.dayInput.value;
+
+        try {
+            if (window.firebaseDB) {
+                await window.firebaseDB.deleteAdminApproval(m, d, dept, room);
+                alert(`${room} 결재가 취소되었습니다.`);
+                generateAdminLinks();
+            }
+        } catch (err) {
+            console.error("개별 결재 취소 에러:", err);
+            alert('결재 취소 중 에러가 발생했습니다.');
+        }
+    };
 
     // ─────────────────────────────────────────────
     // PDF Canvas 오버레이 방식 출력
@@ -649,12 +976,20 @@ document.addEventListener('DOMContentLoaded', () => {
                 ctx.drawImage(sigImg, SIG_X, (PDF_H - 662 - 9) * SCALE, SIG_W, SIG_H);
             }
 
-            if (adminSignatureDataUrl) {
+            // 부장 서명 분기 적용 (일괄 모드 vs 개별 모드)
+            let currentAdminSig = null;
+            if (adminApprovalMode === 'bulk') {
+                currentAdminSig = adminBulkSignatureDataUrl;
+            } else {
+                currentAdminSig = data.adminSignature || null;
+            }
+
+            if (currentAdminSig) {
                 const adminSigImg = new Image();
                 await new Promise((res, rej) => {
                     adminSigImg.onload = res;
                     adminSigImg.onerror = rej;
-                    adminSigImg.src = adminSignatureDataUrl;
+                    adminSigImg.src = currentAdminSig;
                 });
                 const SIG_W = 58 * SCALE;
                 const SIG_H = 16 * SCALE;
@@ -686,6 +1021,7 @@ document.addEventListener('DOMContentLoaded', () => {
     // HTML 방식 폴백 출력 (PDF 로드 실패 시)
     function renderHtmlPrintLayout(data, container, isBulk) {
         const teacherSig = data.signature || signatureDataUrl;
+        const currentAdminSig = adminApprovalMode === 'bulk' ? adminBulkSignatureDataUrl : data.adminSignature;
         const html = `
             <div class="print-header">
                 <h1>2026학년도 직업계고 실습실별 안전점검표</h1>
@@ -700,7 +1036,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     <th style="position:relative;">확 인 자</th>
                     <td style="position:relative;">
                         학과부장 ${data.info.head}
-                        ${adminSignatureDataUrl ? `<img src="${adminSignatureDataUrl}" style="position:absolute;top:50%;right:5px;transform:translateY(-50%);height:40px;z-index:10;" />` : ''}
+                        ${currentAdminSig ? `<img src="${currentAdminSig}" style="position:absolute;top:50%;right:5px;transform:translateY(-50%);height:40px;z-index:10;" />` : ''}
                         <span style="float:right">(인)</span>
                     </td>
                 </tr>

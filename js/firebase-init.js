@@ -50,5 +50,79 @@ window.firebaseDB = {
             console.error("Firebase 불러오기 에러: ", e);
             throw e;
         }
+    },
+
+    // 1. 특정 실습실 개별 부장 결재 저장
+    saveAdminApproval: async (month, day, dept, room, signature) => {
+        try {
+            const docId = `${month}_${day}_${dept}_${room}`;
+            await db.collection("checklists").doc(docId).update({
+                adminSignature: signature,
+                approvedAt: firebase.firestore.FieldValue.serverTimestamp()
+            });
+            console.log(`${room} 부장 결재 저장 성공!`);
+            return true;
+        } catch (e) {
+            console.error("부장 결재 저장 에러: ", e);
+            throw e;
+        }
+    },
+
+    // 2. 특정 실습실 개별 부장 결재 취소
+    deleteAdminApproval: async (month, day, dept, room) => {
+        try {
+            const docId = `${month}_${day}_${dept}_${room}`;
+            await db.collection("checklists").doc(docId).update({
+                adminSignature: firebase.firestore.FieldValue.delete(),
+                approvedAt: firebase.firestore.FieldValue.delete()
+            });
+            console.log(`${room} 부장 결재 취소 성공!`);
+            return true;
+        } catch (e) {
+            console.error("부장 결재 취소 에러: ", e);
+            throw e;
+        }
+    },
+
+    // 3. 부장 결재 일괄 저장 (Batch)
+    saveAdminBulkApproval: async (month, day, submissions, signature) => {
+        try {
+            const batch = db.batch();
+            submissions.forEach(sub => {
+                const docId = `${month}_${day}_${sub.info.dept}_${sub.info.room}`;
+                const ref = db.collection("checklists").doc(docId);
+                batch.update(ref, {
+                    adminSignature: signature,
+                    approvedAt: firebase.firestore.FieldValue.serverTimestamp()
+                });
+            });
+            await batch.commit();
+            console.log("부장 결재 일괄 저장 성공!");
+            return true;
+        } catch (e) {
+            console.error("부장 결재 일괄 저장 에러: ", e);
+            throw e;
+        }
+    },
+
+    // 4. 부장 결재 일괄 취소 (Batch)
+    deleteAdminBulkApproval: async (month, day, submissions) => {
+        try {
+            const batch = db.batch();
+            submissions.forEach(sub => {
+                const docId = `${month}_${day}_${sub.info.dept}_${sub.info.room}`;
+                const ref = db.collection("checklists").doc(docId);
+                batch.update(ref, {
+                    adminSignature: firebase.firestore.FieldValue.delete(),
+                    approvedAt: firebase.firestore.FieldValue.delete()
+                });
+            });
+            await batch.commit();
+            console.log("부장 결재 일괄 취소 성공!");
+            return true;
+        } catch (e) {
+            console.error("부장 결재 일괄 취소 에러: ", e);
+            throw e;
+        }
     }
 };
