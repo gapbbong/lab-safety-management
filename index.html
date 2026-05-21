@@ -88,8 +88,37 @@
 
       <!-- 관리자용 현황판 및 링크 리스트 (초기엔 숨김) -->
       <div class="card hidden" id="linksCard" style="margin-top: 2rem;">
+        <!-- 학과부장 전용 대시보드 배너 및 통계 영역 (JS에서 동적 제어) -->
+        <div id="deptheadDashboard" class="hidden" style="margin-bottom: 2rem;">
+          <div class="depthead-banner">
+            <div class="depthead-banner-left">
+              <h2 id="deptheadWelcomeTitle">최지은 학과부장님 환영합니다</h2>
+              <p id="deptheadSubTitle">2026학년도 실습실 안전점검 결재 센터</p>
+            </div>
+            <div class="depthead-badge">🛡️ 학과부장 권한</div>
+          </div>
+          <div class="stats-grid">
+            <div class="stat-card">
+              <span class="stat-number" id="statTotalRooms">0</span>
+              <span class="stat-label">대상 실습실</span>
+            </div>
+            <div class="stat-card">
+              <span class="stat-number success" id="statSubmittedRooms">0</span>
+              <span class="stat-label">제출 완료</span>
+            </div>
+            <div class="stat-card">
+              <span class="stat-number warning" id="statPendingRooms">0</span>
+              <span class="stat-label">제출 대기</span>
+            </div>
+            <div class="stat-card">
+              <span class="stat-number danger" id="statApprovedRooms">0</span>
+              <span class="stat-label">결재 대기</span>
+            </div>
+          </div>
+        </div>
+
         <div class="card-header" style="display:flex; justify-content:space-between; align-items:center; flex-wrap: wrap; gap: 1rem;">
-          <h2>📊 제출 현황판 및 교사별 링크</h2>
+          <h2 id="linksCardTitle">📊 제출 현황판 및 교사별 링크</h2>
           <div style="display:flex; gap: 0.5rem;">
             <button class="btn btn-outline" id="btnRefreshStatus" type="button">🔄 현황 새로고침</button>
             <button class="btn btn-success" id="btnBulkPrint" type="button">🖨️ 일괄 인쇄</button>
@@ -105,11 +134,11 @@
           <table class="link-table" style="width: 100%; min-width: 860px; border-collapse: collapse; table-layout: fixed; border: none;">
             <thead>
               <tr>
+                <th style="border: 1px solid var(--border-color); padding: 0.6rem; background-color: var(--bg-color); width: 100px;">담당교사</th>
+                <th style="border: 1px solid var(--border-color); padding: 0.6rem; background-color: var(--bg-color); width: 320px;">링크 복사</th>
                 <th style="border: 1px solid var(--border-color); padding: 0.6rem; background-color: var(--bg-color); width: 120px;">제출여부</th>
                 <th style="border: 1px solid var(--border-color); padding: 0.6rem; background-color: var(--bg-color); width: 110px;">학과</th>
                 <th style="border: 1px solid var(--border-color); padding: 0.6rem; background-color: var(--bg-color); width: 220px;">실습실</th>
-                <th style="border: 1px solid var(--border-color); padding: 0.6rem; background-color: var(--bg-color); width: 90px;">담당교사</th>
-                <th style="border: 1px solid var(--border-color); padding: 0.6rem; background-color: var(--bg-color); width: 320px;">링크 복사</th>
               </tr>
             </thead>
             <tbody id="linksBody">

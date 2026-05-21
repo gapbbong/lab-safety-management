@@ -590,8 +590,8 @@ input[type="radio"] {
     font-weight: 700;
 }
 
-/* 실습실 명 등 텍스트 정렬 */
-.link-table td:nth-child(3) {
+/* 실습실 명 등 텍스트 정렬 (실습실이 5번째 열이 됨) */
+.link-table td:nth-child(5) {
     text-align: left;
     padding-left: 0.6rem !important;
 }
@@ -607,5 +607,106 @@ input[type="radio"] {
 .table-container {
     margin-top: 1rem;
     background-color: var(--card-bg);
+}
+
+/* 학과부장 대시보드 추가 스타일 */
+.depthead-banner {
+    background: linear-gradient(135deg, #1e293b 0%, #2563eb 100%);
+    color: white;
+    padding: 1.75rem 2rem;
+    border-radius: 12px;
+    margin-bottom: 1.5rem;
+    box-shadow: 0 4px 15px rgba(37, 99, 235, 0.15);
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 1rem;
+}
+
+.depthead-banner-left h2 {
+    font-size: 1.5rem;
+    font-weight: 800;
+    margin-bottom: 0.25rem;
+    letter-spacing: -0.02em;
+}
+
+.depthead-banner-left p {
+    font-size: 0.95rem;
+    opacity: 0.9;
+}
+
+.depthead-badge {
+    background: rgba(255, 255, 255, 0.2);
+    border: 1px solid rgba(255, 255, 255, 0.3);
+    padding: 0.4rem 0.8rem;
+    border-radius: 99px;
+    font-size: 0.85rem;
+    font-weight: 700;
+    backdrop-filter: blur(4px);
+}
+
+.stats-grid {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 1rem;
+    margin-bottom: 1.5rem;
+}
+
+@media (max-width: 768px) {
+    .stats-grid {
+        grid-template-columns: repeat(2, 1fr);
+    }
+}
+
+@media (max-width: 480px) {
+    .stats-grid {
+        grid-template-columns: 1fr;
+    }
+}
+
+.stat-card {
+    background: var(--card-bg);
+    border: 1px solid var(--border-color);
+    border-radius: 10px;
+    padding: 1.25rem;
+    text-align: center;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.02);
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    gap: 0.25rem;
+    transition: transform 0.2s, box-shadow 0.2s;
+}
+
+.stat-card:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 6px 12px rgba(0,0,0,0.05);
+}
+
+.stat-number {
+    font-size: 1.75rem;
+    font-weight: 800;
+    color: var(--primary-color);
+    line-height: 1.2;
+}
+
+.stat-number.success {
+    color: var(--success-color);
+}
+
+.stat-number.warning {
+    color: #d97706; /* amber-600 */
+}
+
+.stat-number.danger {
+    color: var(--danger-color);
+}
+
+.stat-label {
+    font-size: 0.85rem;
+    color: var(--text-muted);
+    font-weight: 600;
 }
 

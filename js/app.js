@@ -48,12 +48,23 @@ document.addEventListener('DOMContentLoaded', () => {
         btnCloseAdminApproval: document.getElementById('btnCloseAdminApproval'),
         btnCloseAdminApprovalBottom: document.getElementById('btnCloseAdminApprovalBottom'),
         btnClearAdminIndivSignature: document.getElementById('btnClearAdminIndivSignature'),
-        btnSaveAdminApproval: document.getElementById('btnSaveAdminApproval')
+        btnSaveAdminApproval: document.getElementById('btnSaveAdminApproval'),
+        
+        // 학과부장 대시보드 엘리먼트 추가
+        deptheadDashboard: document.getElementById('deptheadDashboard'),
+        deptheadWelcomeTitle: document.getElementById('deptheadWelcomeTitle'),
+        deptheadSubTitle: document.getElementById('deptheadSubTitle'),
+        statTotalRooms: document.getElementById('statTotalRooms'),
+        statSubmittedRooms: document.getElementById('statSubmittedRooms'),
+        statPendingRooms: document.getElementById('statPendingRooms'),
+        statApprovedRooms: document.getElementById('statApprovedRooms'),
+        linksCardTitle: document.getElementById('linksCardTitle')
     };
 
     let currentChecklistState = {};
     let currentInfo = {};
     let isAdminMode = true;
+    let isDeptHeadMode = false; // 학과부장 전용 페이지 모드 여부
     let signatureDataUrl = null;
 
     // 부장 결재 관리 상태 변수
@@ -81,8 +92,34 @@ document.addEventListener('DOMContentLoaded', () => {
         const d = params.get('d');
         const dept = params.get('dept');
         const room = params.get('room');
+        const role = params.get('role');
 
-        if (m && d && dept && room) {
+        if (role === 'depthead') {
+            isDeptHeadMode = true;
+            isAdminMode = true;
+            if (m && d) {
+                elements.monthSelect.value = m;
+                elements.dayInput.value = d;
+                
+                // 학과부장 접속 시 일괄 결재와 개별 결재 여부를 팝업으로 질문
+                const isBulk = confirm("모든 실습실에 동일한 서명을 일괄 적용하시겠습니까?\n\n[확인] 모든 실습실 일괄 서명 적용\n[취소] 실습실별 개별 서명 적용");
+                adminApprovalMode = isBulk ? 'bulk' : 'individual';
+
+                // 뒤로가기 버튼 노출 및 처음으로 이동 기능 적용
+                if (elements.btnBack) {
+                    elements.btnBack.classList.remove('hidden');
+                    elements.btnBack.title = '처음으로';
+                    elements.btnBack.onclick = (e) => {
+                        e.preventDefault();
+                        window.location.href = window.location.pathname;
+                    };
+                }
+
+                // 점검 정보 입력 화면을 건너뜀
+                elements.stepInfo.classList.add('hidden');
+                generateAdminLinks();
+            }
+        } else if (m && d && dept && room) {
             isAdminMode = false;
             elements.btnStartText.textContent = "점검 시작 ➔";
             elements.monthSelect.value = m;
@@ -105,12 +142,50 @@ document.addEventListener('DOMContentLoaded', () => {
                 
                 // Select room and teacher
                 const roomExists = safetyData.departments[dept].rooms.find(r => r.name === room);
+                let teacherName = "";
                 if (roomExists) {
                     elements.roomSelect.value = room;
                     elements.teacherInput.value = roomExists.teacher;
+                    teacherName = roomExists.teacher;
                 }
+                
+                validateStep1();
+
+                // 담당교사 여부 확인 팝업 노출
+                setTimeout(() => {
+                    const isConfirmed = confirm(`${teacherName} 선생님, ${room} 담당자가 맞습니까?`);
+                    if (isConfirmed) {
+                        // 확인 누르면 다음 페이지(점검표 입력 화면)로 바로 진행
+                        currentInfo = {
+                            month: m,
+                            day: d,
+                            dept: dept,
+                            room: room,
+                            head: safetyData.departments[dept].head,
+                            teacher: teacherName,
+                            date: `2026-${m.padStart(2, '0')}-${d.padStart(2, '0')}`
+                        };
+                        
+                        elements.checkInfo.textContent = `${currentInfo.dept} / ${currentInfo.room} / 담당: ${currentInfo.teacher}`;
+                        renderChecklist();
+                        updateProgress();
+                        
+                        elements.stepInfo.classList.add('hidden');
+                        elements.stepChecklist.classList.remove('hidden');
+                        if (elements.btnBack) {
+                            elements.btnBack.classList.remove('hidden');
+                            elements.btnBack.title = '처음으로';
+                            elements.btnBack.onclick = (e) => {
+                                e.preventDefault();
+                                window.location.href = window.location.pathname;
+                            };
+                        }
+                    } else {
+                        // 취소하면 첫 화면으로 이동
+                        window.location.href = window.location.pathname;
+                    }
+                }, 100);
             }
-            validateStep1();
         }
     }
 
@@ -236,6 +311,48 @@ document.addEventListener('DOMContentLoaded', () => {
 
         linksBody.innerHTML = '';
         const baseUrl = window.location.href.split('?')[0];
+
+        // ── 실습실 데이터 리스트 및 정렬 ───────────────────────
+        let allRooms = [];
+        Object.keys(safetyData.departments).forEach(deptName => {
+            const dept = safetyData.departments[deptName];
+            dept.rooms.forEach(room => {
+                allRooms.push({ deptName, room });
+            });
+        });
+        
+        // 담당교사 이름순(가나다순) 정렬
+        allRooms.sort((a, b) => {
+            return a.room.teacher.localeCompare(b.room.teacher, 'ko');
+        });
+
+        // ── 학과부장 대시보드 통계 업데이트 (학과부장 모드일 때만) ──────────────────
+        if (isDeptHeadMode) {
+            elements.deptheadDashboard.classList.remove('hidden');
+            elements.linksCardTitle.textContent = "📋 학과부장 결재 목록";
+            
+            const totalCount = allRooms.length;
+            const submittedCount = submittedData.length;
+            const pendingCount = totalCount - submittedCount;
+            
+            let approvedCount = 0;
+            if (adminApprovalMode === 'bulk') {
+                approvedCount = adminBulkSignatureDataUrl ? submittedCount : 0;
+            } else {
+                submittedData.forEach(sub => {
+                    if (sub.adminSignature) approvedCount++;
+                });
+            }
+            const approvalPendingCount = submittedCount - approvedCount;
+
+            elements.statTotalRooms.textContent = totalCount;
+            elements.statSubmittedRooms.textContent = submittedCount;
+            elements.statPendingRooms.textContent = pendingCount;
+            elements.statApprovedRooms.textContent = approvalPendingCount;
+        } else {
+            elements.deptheadDashboard.classList.add('hidden');
+            elements.linksCardTitle.textContent = "📊 제출 현황판 및 교사별 링크";
+        }
         
         // ── 1. 학과부장 행 렌더링 ───────────────────────
         const deptNames = Object.keys(safetyData.departments);
@@ -247,34 +364,46 @@ document.addEventListener('DOMContentLoaded', () => {
                 ? '<span class="badge badge-success">✅ 일괄결재완료</span>' 
                 : '<span class="badge badge-warning">결재 대기</span>';
         } else {
-            approvalBadge = '<span style="color:var(--text-muted);font-weight:600;">-</span>';
+            const isAllApproved = submittedData.length > 0 && submittedData.every(item => item.adminSignature);
+            approvalBadge = isAllApproved
+                ? '<span class="badge badge-success">✅ 결재 완료</span>'
+                : '<span class="badge badge-warning">결재 대기</span>';
         }
 
         const headRowTr = document.createElement('tr');
         headRowTr.style.backgroundColor = '#f8fafc';
+        
+        const deptHeadUrl = `${baseUrl}?m=${m}&d=${d}&role=depthead`;
+
+        let deptHeadLinksCellHtml = '';
+        if (isDeptHeadMode) {
+            deptHeadLinksCellHtml = `
+                <div style="display:flex; gap:0.25rem; justify-content:center;">
+                    <button class="btn btn-primary" style="padding: 0.2rem 0.4rem;" onclick="navigator.clipboard.writeText('${deptHeadUrl}').then(() => {this.innerText='✅ 완료'; setTimeout(()=>this.innerText='📋 복사',1500)})">📋 복사</button>
+                    <button class="btn btn-outline" style="padding: 0.2rem 0.4rem;" onclick="window.openDeptHeadModePrompt()">🔗 열기</button>
+                </div>
+            `;
+        } else {
+            deptHeadLinksCellHtml = `
+                <div style="display:flex; gap:0.25rem; justify-content:center;">
+                    <button class="btn btn-primary" style="padding: 0.2rem 0.4rem;" onclick="navigator.clipboard.writeText('${deptHeadUrl}').then(() => {this.innerText='✅ 완료'; setTimeout(()=>this.innerText='📋 복사',1500)})">📋 복사</button>
+                    <a href="${deptHeadUrl}" target="_blank" class="btn btn-outline" style="padding: 0.2rem 0.4rem; text-decoration:none; display:inline-flex; align-items:center;">🔗 열기</a>
+                </div>
+            `;
+        }
+
+        // 새 순서: 담당교사, 링크 복사, 제출여부, 학과, 실습실
         headRowTr.innerHTML = `
+            <td><strong>${deptHeadName}</strong></td>
+            <td>${deptHeadLinksCellHtml}</td>
             <td style="text-align:center;">${approvalBadge}</td>
             <td><strong>학과부장</strong></td>
             <td><strong>학과부장</strong></td>
-            <td><strong>${deptHeadName}</strong></td>
-            <td>
-                <div style="display:flex; flex-direction:column; gap:0.25rem; font-size:0.75rem; text-align:left; line-height:1.2;">
-                    <label style="display:flex; align-items:center; gap:0.25rem; cursor:pointer; font-weight:700;">
-                        <input type="radio" name="adminApprovalMode" value="bulk" ${adminApprovalMode === 'bulk' ? 'checked' : ''}> 모든 실습실에 동일 서명 일괄 적용
-                    </label>
-                    <label style="display:flex; align-items:center; gap:0.25rem; cursor:pointer; font-weight:700; position:relative;">
-                        <input type="radio" name="adminApprovalMode" value="individual" ${adminApprovalMode === 'individual' ? 'checked' : ''}> 실습실별 개별 서명 적용
-                    </label>
-                    <div id="indivGuidanceText" style="color:var(--danger-color); font-size:0.7rem; padding-left:1.1rem; font-weight:600; display:${adminApprovalMode === 'individual' ? 'block' : 'none'};">
-                        ⚠️ (여러번 각각 직접 서명해야 합니다)
-                    </div>
-                </div>
-            </td>
         `;
         linksBody.appendChild(headRowTr);
 
         // ── 2. 학과부장 일괄 결재 서명 패드 행 렌더링 (일괄 모드일 때만 노출) ───────────────────────
-        if (adminApprovalMode === 'bulk') {
+        if (isDeptHeadMode && adminApprovalMode === 'bulk') {
             const bulkSigRowTr = document.createElement('tr');
             bulkSigRowTr.id = 'adminBulkSignatureRow';
             bulkSigRowTr.style.backgroundColor = '#f1f5f9';
@@ -388,29 +517,7 @@ document.addEventListener('DOMContentLoaded', () => {
             }
         }
 
-        // 라디오 버튼 이벤트 바인딩 다시 입히기 (headRowTr 내부)
-        const radios = headRowTr.querySelectorAll('input[name="adminApprovalMode"]');
-        radios.forEach(radio => {
-            radio.addEventListener('change', (e) => {
-                adminApprovalMode = e.target.value;
-                generateAdminLinks();
-            });
-        });
-
-        // ── 3. 실습실 데이터 리스트 정렬 및 렌더링 ───────────────────────
-        let allRooms = [];
-        Object.keys(safetyData.departments).forEach(deptName => {
-            const dept = safetyData.departments[deptName];
-            dept.rooms.forEach(room => {
-                allRooms.push({ deptName, room });
-            });
-        });
-        
-        // 담당교사 이름순(가나다순) 정렬
-        allRooms.sort((a, b) => {
-            return a.room.teacher.localeCompare(b.room.teacher, 'ko');
-        });
-
+        // ── 3. 실습실 데이터 리스트 렌더링 ───────────────────────
         allRooms.forEach(({ deptName, room }) => {
             const params = new URLSearchParams({ m, d, dept: deptName, room: room.name });
             const finalUrl = `${baseUrl}?${params.toString()}`;
@@ -423,37 +530,51 @@ document.addEventListener('DOMContentLoaded', () => {
             if (!isSubmitted) {
                 statusCellHtml = '<span style="color:var(--danger-color);font-weight:bold;">❌ 미제출</span>';
             } else {
-                if (adminApprovalMode === 'bulk') {
-                    const hasSig = matchedSubmission.adminSignature || adminBulkSignatureDataUrl;
-                    statusCellHtml = hasSig 
-                        ? '<span class="badge badge-success">✅ 일괄결재됨</span>' 
-                        : '<div style="display:flex;flex-direction:column;align-items:center;gap:0.15rem;"><span style="color:var(--success-color);font-weight:bold;">✅ 제출됨</span><span class="badge badge-warning" style="font-size:0.7rem;padding:0.1rem 0.3rem;">결재 대기</span></div>';
-                } else {
-                    // 개별결재 모드
-                    const hasSig = matchedSubmission.adminSignature;
-                    if (hasSig) {
-                        statusCellHtml = `
-                            <div style="display:flex; flex-direction:column; align-items:center; gap:0.2rem;">
-                                <img src="${hasSig}" style="height:24px; border:1px solid #cbd5e1; border-radius:4px; background:white; padding:1px;" />
-                                <button class="btn btn-outline" type="button" style="padding: 0.1rem 0.3rem !important; font-size: 0.7rem !important; border-color: var(--danger-color); color: var(--danger-color);" onclick="window.deleteIndividualApproval('${deptName}', '${room.name}')">결재취소</button>
-                            </div>
-                        `;
+                if (isDeptHeadMode) {
+                    // 학과부장 전용 페이지: 결재 기능 제공
+                    if (adminApprovalMode === 'bulk') {
+                        const hasSig = matchedSubmission.adminSignature || adminBulkSignatureDataUrl;
+                        statusCellHtml = hasSig 
+                            ? '<span class="badge badge-success">✅ 일괄결재됨</span>' 
+                            : '<div style="display:flex;flex-direction:column;align-items:center;gap:0.15rem;"><span style="color:var(--success-color);font-weight:bold;">✅ 제출됨</span><span class="badge badge-warning" style="font-size:0.7rem;padding:0.1rem 0.3rem;">결재 대기</span></div>';
                     } else {
-                        statusCellHtml = `
-                            <div style="display:flex; flex-direction:column; align-items:center; gap:0.2rem;">
-                                <span style="color:var(--success-color);font-weight:bold; font-size:0.75rem;">✅ 제출됨</span>
-                                <button class="btn btn-primary" type="button" style="padding: 0.15rem 0.35rem !important; font-size: 0.75rem !important;" onclick="window.openIndividualApprovalModal('${deptName}', '${room.name}')">✍️ 결재하기</button>
-                            </div>
-                        `;
+                        // 개별결재 모드
+                        const hasSig = matchedSubmission.adminSignature;
+                        if (hasSig) {
+                            statusCellHtml = `
+                                <div style="display:flex; flex-direction:column; align-items:center; gap:0.2rem;">
+                                    <img src="${hasSig}" style="height:24px; border:1px solid #cbd5e1; border-radius:4px; background:white; padding:1px;" />
+                                    <button class="btn btn-outline" type="button" style="padding: 0.1rem 0.3rem !important; font-size: 0.7rem !important; border-color: var(--danger-color); color: var(--danger-color);" onclick="window.deleteIndividualApproval('${deptName}', '${room.name}')">결재취소</button>
+                                </div>
+                            `;
+                        } else {
+                            statusCellHtml = `
+                                <div style="display:flex; flex-direction:column; align-items:center; gap:0.2rem;">
+                                    <span style="color:var(--success-color);font-weight:bold; font-size:0.75rem;">✅ 제출됨</span>
+                                    <button class="btn btn-primary" type="button" style="padding: 0.15rem 0.35rem !important; font-size: 0.75rem !important;" onclick="window.openIndividualApprovalModal('${deptName}', '${room.name}')">✍️ 결재하기</button>
+                                </div>
+                            `;
+                        }
+                    }
+                } else {
+                    // 일반 관리자 페이지: 결재 버튼 없이 완료 상태만 노출
+                    if (adminApprovalMode === 'bulk') {
+                        const hasSig = matchedSubmission.adminSignature || adminBulkSignatureDataUrl;
+                        statusCellHtml = hasSig 
+                            ? '<span class="badge badge-success">✅ 일괄결재됨</span>' 
+                            : '<span style="color:var(--success-color);font-weight:bold;">✅ 제출됨</span>';
+                    } else {
+                        const hasSig = matchedSubmission.adminSignature;
+                        statusCellHtml = hasSig 
+                            ? '<span class="badge badge-success">✅ 결재 완료</span>' 
+                            : '<span style="color:var(--success-color);font-weight:bold;">✅ 제출됨</span>';
                     }
                 }
             }
 
             const tr = document.createElement('tr');
+            // 새 순서: 담당교사, 링크 복사, 제출여부, 학과, 실습실
             tr.innerHTML = `
-                <td style="text-align:center; vertical-align:middle;">${statusCellHtml}</td>
-                <td>${deptName}</td>
-                <td><strong>${room.name}</strong></td>
                 <td>${room.teacher}</td>
                 <td>
                     <div style="display:flex; gap:0.25rem; justify-content:center;">
@@ -461,6 +582,9 @@ document.addEventListener('DOMContentLoaded', () => {
                         <a href="${finalUrl}" target="_blank" class="btn btn-outline" style="padding: 0.2rem 0.4rem; text-decoration:none; display:inline-flex; align-items:center;">🔗 열기</a>
                     </div>
                 </td>
+                <td style="text-align:center; vertical-align:middle;">${statusCellHtml}</td>
+                <td>${deptName}</td>
+                <td><strong>${room.name}</strong></td>
             `;
             linksBody.appendChild(tr);
         });
@@ -863,6 +987,13 @@ document.addEventListener('DOMContentLoaded', () => {
             window.print();
         });
     }
+
+    // 🛡️ 학과부장 모드 일괄/개별 서명 선택 프롬프트 (글로벌 바인딩)
+    window.openDeptHeadModePrompt = function() {
+        const isBulk = confirm("모든 실습실에 동일한 서명을 일괄 적용하시겠습니까?\n\n[확인] 모든 실습실 일괄 서명 적용\n[취소] 실습실별 개별 서명 적용");
+        adminApprovalMode = isBulk ? 'bulk' : 'individual';
+        generateAdminLinks();
+    };
 
     // ✍️ 개별 결재 모달 열기 (글로벌 바인딩)
     window.openIndividualApprovalModal = function(dept, room) {
