@@ -340,6 +340,7 @@ document.addEventListener('DOMContentLoaded', () => {
     function renderChecklist() {
         elements.checklistForm.innerHTML = '';
         currentChecklistState = {};
+        elements.btnSave.disabled = true;
         
         safetyData.checklist.forEach((category, catIndex) => {
             const catDiv = document.createElement('div');
@@ -492,11 +493,49 @@ document.addEventListener('DOMContentLoaded', () => {
         };
     }
 
+    // 캔버스 비어있는지 확인하는 헬퍼 함수
+    function checkSignatureEmpty(canvasEl) {
+        if (!canvasEl) return true;
+        const ctx = canvasEl.getContext('2d');
+        const buffer = new Uint32Array(ctx.getImageData(0, 0, canvasEl.width, canvasEl.height).data.buffer);
+        return !buffer.some(color => color !== 0);
+    }
+
+    // 저장하기 버튼 상태 갱신 함수 (모든 항목 완료 + 서명 완료 시 활성화)
+    function updateSaveButtonState() {
+        const total = safetyData.totalItems;
+        let checked = 0;
+        Object.values(currentChecklistState).forEach(state => {
+            if (state.status) checked++;
+        });
+
+        const isChecklistComplete = (checked === total);
+        const hasSignature = !checkSignatureEmpty(canvas);
+
+        elements.btnSave.disabled = !(isChecklistComplete && hasSignature);
+
+        if (isChecklistComplete && hasSignature) {
+            elements.btnSave.classList.add('ready');
+            elements.btnSave.style.animation = 'pulse 1.5s infinite';
+        } else {
+            elements.btnSave.classList.remove('ready');
+            elements.btnSave.style.animation = 'none';
+        }
+    }
+
     // 각 서명 패드 초기화
     const canvas = document.getElementById('signaturePad');
     if (canvas) {
         initSignaturePad(canvas, document.getElementById('btnClearSignature'), () => {
             signatureDataUrl = null;
+            updateSaveButtonState();
+        });
+
+        // 서명 드로잉 감지하여 저장 버튼 실시간 활성화/비활성화
+        ['mouseup', 'touchend'].forEach(evt => {
+            canvas.addEventListener(evt, () => {
+                setTimeout(updateSaveButtonState, 50);
+            });
         });
     }
 
@@ -525,13 +564,7 @@ document.addEventListener('DOMContentLoaded', () => {
         elements.progressFill.style.width = `${percent}%`;
         elements.progressText.textContent = `${checked} / ${total} 항목 완료`;
         
-        if (checked === total) {
-            elements.btnSave.classList.add('ready');
-            elements.btnSave.style.animation = 'pulse 1.5s infinite';
-        } else {
-            elements.btnSave.classList.remove('ready');
-            elements.btnSave.style.animation = 'none';
-        }
+        updateSaveButtonState();
     }
 
     // Save logic
@@ -578,19 +611,23 @@ document.addEventListener('DOMContentLoaded', () => {
         try {
             if (window.firebaseDB) {
                 await window.firebaseDB.saveChecklist(finalData);
+                alert(`${currentInfo.room} 안전점검표가 Firebase DB에 성공적으로 저장되었습니다.`);
             }
         } catch (e) {
             alert('저장 중 오류가 발생했습니다. 다시 시도해주세요.');
             return;
         }
 
+        // 저장 후 현황판으로 이동
         elements.stepChecklist.classList.add('hidden');
-        elements.stepDone.classList.remove('hidden');
-        elements.doneDesc.innerHTML = `<strong>${currentInfo.room}</strong> 점검 내역이 저장되었습니다.<br>일자: 2026년 ${currentInfo.month}월 ${currentInfo.day}일<br><br><span style="color:green;font-weight:bold;">✅ Firebase DB 저장 완료</span>`;
+        elements.stepInfo.classList.remove('hidden');
+        if (elements.btnBack) elements.btnBack.classList.add('hidden');
 
-        // PDF 렌더링 (비동기)
-        elements.printArea.innerHTML = '';
-        await renderPrintLayout(finalData, false);
+        // 점검 정보 설정 및 현황판 갱신
+        elements.monthSelect.value = currentInfo.month;
+        elements.dayInput.value = currentInfo.day;
+        validateStep1();
+        generateAdminLinks();
     });
 
     // JSON Export 삭제됨
