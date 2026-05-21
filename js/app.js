@@ -204,8 +204,11 @@ document.addEventListener('DOMContentLoaded', () => {
                     <td style="border: 1px solid var(--border-color); padding: 0.75rem;"><strong>${room.name}</strong></td>
                     <td style="border: 1px solid var(--border-color); padding: 0.75rem;">${room.teacher}</td>
                     <td style="border: 1px solid var(--border-color); padding: 0.75rem;">
-                        <button class="btn btn-primary" style="padding: 0.25rem 0.5rem; font-size: 0.8rem;" onclick="navigator.clipboard.writeText('${finalUrl}').then(() => {this.innerText='✅ 복사완료!'; setTimeout(()=>this.innerText='📋 복사하기',2000)})">📋 복사하기</button>
-                        <div style="font-size:0.75rem; color:#64748b; margin-top:0.25rem; max-width:200px; overflow:hidden; text-overflow:ellipsis;">${finalUrl}</div>
+                        <div style="display:flex; gap:0.4rem; flex-wrap:wrap; margin-bottom:0.4rem;">
+                            <button class="btn btn-primary" style="padding: 0.25rem 0.5rem; font-size: 0.8rem;" onclick="navigator.clipboard.writeText('${finalUrl}').then(() => {this.innerText='✅ 복사완료!'; setTimeout(()=>this.innerText='📋 복사하기',2000)})">📋 복사하기</button>
+                            <a href="${finalUrl}" target="_blank" style="display:inline-flex; align-items:center; padding: 0.25rem 0.5rem; font-size: 0.8rem; background:#16a34a; color:white; border-radius:6px; text-decoration:none; font-weight:600;">🔗 열기</a>
+                        </div>
+                        <a href="${finalUrl}" target="_blank" style="font-size:0.75rem; color:#2563eb; display:block; max-width:200px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; text-decoration:underline;">${finalUrl}</a>
                     </td>
                 `;
                 linksBody.appendChild(tr);
