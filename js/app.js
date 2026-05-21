@@ -26,6 +26,9 @@ document.addEventListener('DOMContentLoaded', () => {
         btnExportPdfStep2: document.getElementById('btnExportPdfStep2'),
         btnCheckAllGood: document.getElementById('btnCheckAllGood'),
         
+        btnRefreshStatus: document.getElementById('btnRefreshStatus'),
+        btnBulkPrint: document.getElementById('btnBulkPrint'),
+        
         doneDesc: document.getElementById('doneDesc'),
         btnNewCheck: document.getElementById('btnNewCheck'),
         btnExportDone: document.getElementById('btnExportDone'),
@@ -38,7 +41,9 @@ document.addEventListener('DOMContentLoaded', () => {
     let currentInfo = {};
     let isAdminMode = true;
     let signatureDataUrl = null;
+    let adminSignatureDataUrl = null;
     let isDrawing = false;
+    let isAdminDrawing = false;
 
     // Step 1: Initialize Department Dropdown based on data.js
     function initDepartments() {
@@ -183,11 +188,23 @@ document.addEventListener('DOMContentLoaded', () => {
     });
 
     // Generate Links for Admin
-    function generateAdminLinks() {
+    async function generateAdminLinks() {
         const m = elements.monthSelect.value;
         const d = elements.dayInput.value;
         const linksCard = document.getElementById('linksCard');
         const linksBody = document.getElementById('linksBody');
+        
+        linksBody.innerHTML = '<tr><td colspan="5" style="padding:1rem; text-align:center;">데이터를 불러오는 중입니다...</td></tr>';
+        linksCard.classList.remove('hidden');
+
+        let submittedData = [];
+        try {
+            if (window.firebaseDB) {
+                submittedData = await window.firebaseDB.getChecklistsForDate(m, d);
+            }
+        } catch (e) {
+            console.error('Firebase 로드 실패', e);
+        }
         
         linksBody.innerHTML = '';
         const baseUrl = window.location.href.split('?')[0];
@@ -198,23 +215,28 @@ document.addEventListener('DOMContentLoaded', () => {
                 const params = new URLSearchParams({ m, d, dept: deptName, room: room.name });
                 const finalUrl = `${baseUrl}?${params.toString()}`;
                 
+                const isSubmitted = submittedData.some(item => item.info && item.info.dept === deptName && item.info.room === room.name);
+                const statusBadge = isSubmitted ? '<span style="color:green;font-weight:bold;">✅ 제출됨</span>' : '<span style="color:red;">❌ 미제출</span>';
+
                 const tr = document.createElement('tr');
                 tr.innerHTML = `
+                    <td style="border: 1px solid var(--border-color); padding: 0.75rem; text-align:center;">${statusBadge}</td>
                     <td style="border: 1px solid var(--border-color); padding: 0.75rem;">${deptName}</td>
                     <td style="border: 1px solid var(--border-color); padding: 0.75rem;"><strong>${room.name}</strong></td>
                     <td style="border: 1px solid var(--border-color); padding: 0.75rem;">${room.teacher}</td>
                     <td style="border: 1px solid var(--border-color); padding: 0.75rem;">
-                        <div style="display:flex; gap:0.4rem; flex-wrap:wrap; margin-bottom:0.4rem;">
-                            <button class="btn btn-primary" style="padding: 0.25rem 0.5rem; font-size: 0.8rem;" onclick="navigator.clipboard.writeText('${finalUrl}').then(() => {this.innerText='✅ 복사완료!'; setTimeout(()=>this.innerText='📋 복사하기',2000)})">📋 복사하기</button>
-                            <a href="${finalUrl}" target="_blank" style="display:inline-flex; align-items:center; padding: 0.25rem 0.5rem; font-size: 0.8rem; background:#16a34a; color:white; border-radius:6px; text-decoration:none; font-weight:600;">🔗 열기</a>
-                        </div>
-                        <a href="${finalUrl}" target="_blank" style="font-size:0.75rem; color:#2563eb; display:block; max-width:200px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; text-decoration:underline;">${finalUrl}</a>
+                        <button class="btn btn-primary" style="padding: 0.25rem 0.5rem; font-size: 0.8rem;" onclick="navigator.clipboard.writeText('${finalUrl}').then(() => {this.innerText='✅ 복사완료!'; setTimeout(()=>this.innerText='📋 복사하기',2000)})">📋 복사하기</button>
                     </td>
                 `;
                 linksBody.appendChild(tr);
             });
         });
-        linksCard.classList.remove('hidden');
+
+        window.currentSubmittedData = submittedData;
+    }
+
+    if (elements.btnRefreshStatus) {
+        elements.btnRefreshStatus.addEventListener('click', generateAdminLinks);
     }
 
     // Render Checklist Form
@@ -358,6 +380,61 @@ document.addEventListener('DOMContentLoaded', () => {
         
         btnClearSignature.addEventListener('click', () => {
             ctx.clearRect(0, 0, canvas.width, canvas.height);
+            signatureDataUrl = null;
+        });
+    }
+
+    // Admin Signature Pad Logic
+    const adminCanvas = document.getElementById('adminSignaturePad');
+    if (adminCanvas) {
+        const actx = adminCanvas.getContext('2d');
+        const btnClearAdminSignature = document.getElementById('btnClearAdminSignature');
+        actx.clearRect(0, 0, adminCanvas.width, adminCanvas.height);
+        
+        function getAdminPointerPos(e) {
+            const rect = adminCanvas.getBoundingClientRect();
+            const clientX = e.touches ? e.touches[0].clientX : e.clientX;
+            const clientY = e.touches ? e.touches[0].clientY : e.clientY;
+            return { x: clientX - rect.left, y: clientY - rect.top };
+        }
+        
+        function startAdminDrawing(e) {
+            e.preventDefault();
+            isAdminDrawing = true;
+            const pos = getAdminPointerPos(e);
+            actx.beginPath();
+            actx.moveTo(pos.x, pos.y);
+        }
+        
+        function drawAdmin(e) {
+            if (!isAdminDrawing) return;
+            e.preventDefault();
+            const pos = getAdminPointerPos(e);
+            actx.lineTo(pos.x, pos.y);
+            actx.strokeStyle = '#0f172a';
+            actx.lineWidth = 2;
+            actx.lineCap = 'round';
+            actx.stroke();
+        }
+        
+        function stopAdminDrawing() {
+            if (!isAdminDrawing) return;
+            isAdminDrawing = false;
+            actx.closePath();
+            adminSignatureDataUrl = adminCanvas.toDataURL("image/png");
+        }
+        
+        adminCanvas.addEventListener('mousedown', startAdminDrawing);
+        adminCanvas.addEventListener('mousemove', drawAdmin);
+        adminCanvas.addEventListener('mouseup', stopAdminDrawing);
+        adminCanvas.addEventListener('mouseout', stopAdminDrawing);
+        adminCanvas.addEventListener('touchstart', startAdminDrawing, { passive: false });
+        adminCanvas.addEventListener('touchmove', drawAdmin, { passive: false });
+        adminCanvas.addEventListener('touchend', stopAdminDrawing);
+        
+        btnClearAdminSignature.addEventListener('click', () => {
+            actx.clearRect(0, 0, adminCanvas.width, adminCanvas.height);
+            adminSignatureDataUrl = null;
         });
     }
 
@@ -418,13 +495,28 @@ document.addEventListener('DOMContentLoaded', () => {
         if (canvas) {
             signatureDataUrl = canvas.toDataURL("image/png");
         }
+        
+        const finalData = getFinalData();
+        if (signatureDataUrl) {
+            finalData.signature = signatureDataUrl;
+        }
+
+        try {
+            if (window.firebaseDB) {
+                await window.firebaseDB.saveChecklist(finalData);
+            }
+        } catch (e) {
+            alert('저장 중 오류가 발생했습니다. 다시 시도해주세요.');
+            return;
+        }
 
         elements.stepChecklist.classList.add('hidden');
         elements.stepDone.classList.remove('hidden');
-        elements.doneDesc.innerHTML = `<strong>${currentInfo.room}</strong> 점검 내역이 저장되었습니다.<br>일자: 2026년 ${currentInfo.month}월 ${currentInfo.day}일`;
+        elements.doneDesc.innerHTML = `<strong>${currentInfo.room}</strong> 점검 내역이 저장되었습니다.<br>일자: 2026년 ${currentInfo.month}월 ${currentInfo.day}일<br><br><span style="color:green;font-weight:bold;">✅ Firebase DB 저장 완료</span>`;
 
         // PDF 렌더링 (비동기)
-        await renderPrintLayout();
+        elements.printArea.innerHTML = '';
+        await renderPrintLayout(finalData, false);
     });
 
     // JSON Export
@@ -446,7 +538,31 @@ document.addEventListener('DOMContentLoaded', () => {
             if (canvas) {
                 signatureDataUrl = canvas.toDataURL("image/png");
             }
-            await renderPrintLayout();
+            elements.printArea.innerHTML = '';
+            await renderPrintLayout(getFinalData(), false);
+            window.print();
+        });
+    }
+
+    if (elements.btnBulkPrint) {
+        elements.btnBulkPrint.addEventListener('click', async () => {
+            if (!window.currentSubmittedData || window.currentSubmittedData.length === 0) {
+                alert('제출된 점검표가 없습니다.');
+                return;
+            }
+            if (!adminSignatureDataUrl) {
+                if (!confirm('부장님 서명이 입력되지 않았습니다. 서명 없이 일괄 인쇄하시겠습니까?')) {
+                    return;
+                }
+            }
+            elements.printArea.innerHTML = '<p style="text-align:center;padding:30px;font-size:1rem;">🔄 전체 PDF 렌더링 중...</p>';
+            
+            const tempDiv = document.createElement('div');
+            for (const data of window.currentSubmittedData) {
+                await renderPrintLayout(data, true, tempDiv);
+            }
+            elements.printArea.innerHTML = '';
+            elements.printArea.appendChild(tempDiv);
             window.print();
         });
     }
@@ -468,22 +584,26 @@ document.addEventListener('DOMContentLoaded', () => {
     // ─────────────────────────────────────────────
     // PDF Canvas 오버레이 방식 출력
     // ─────────────────────────────────────────────
-    async function renderPrintLayout() {
-        const data = getFinalData();
+    async function renderPrintLayout(dataOverride, isBulk = false, targetContainer = null) {
+        const data = dataOverride || getFinalData();
         const deptData = safetyData.departments[data.info.dept];
+
+        const container = targetContainer || elements.printArea;
 
         // PDF 정보가 없으면 HTML 방식으로 폴백
         if (!deptData || !deptData.pdfFile) {
-            renderHtmlPrintLayout(data);
+            renderHtmlPrintLayout(data, container, isBulk);
             return;
         }
         const roomData = deptData.rooms.find(r => r.name === data.info.room);
         if (!roomData || !roomData.pdfPage) {
-            renderHtmlPrintLayout(data);
+            renderHtmlPrintLayout(data, container, isBulk);
             return;
         }
 
-        elements.printArea.innerHTML = '<p style="text-align:center;padding:30px;font-size:1rem;">🔄 PDF 렌더링 중...</p>';
+        if (!isBulk) {
+            container.innerHTML = '<p style="text-align:center;padding:30px;font-size:1rem;">🔄 PDF 렌더링 중...</p>';
+        }
 
         try {
             // PDF.js 초기화
@@ -510,13 +630,13 @@ document.addEventListener('DOMContentLoaded', () => {
             await page.render({ canvasContext: ctx, viewport }).promise;
 
             // ── 날짜 오버레이 ──────────────────────────
-            // PDF: 점검일자 셀 오른쪽 (X≈382, Y≈702)
+            // PDF: 점검일자 셀 오른쪽 (X≈382, Y≈702) -> 706으로 올려서 위치 조정
             ctx.font = `bold ${12 * SCALE}px 'Malgun Gothic', 'Apple SD Gothic Neo', sans-serif`;
             ctx.fillStyle = '#000';
             ctx.textAlign = 'left';
             ctx.textBaseline = 'middle';
             const dateText = `2026년 ${String(data.info.month).padStart(2,'0')}월 ${String(data.info.day).padStart(2,'0')}일`;
-            ctx.fillText(dateText, 382 * SCALE, (PDF_H - 702) * SCALE);
+            ctx.fillText(dateText, 382 * SCALE, (PDF_H - 706) * SCALE);
 
             // ── 체크 결과 오버레이 ─────────────────────
             // 25개 항목의 PDF Y좌표 (위→아래 순서)
@@ -537,7 +657,7 @@ document.addEventListener('DOMContentLoaded', () => {
             const flatResults = [];
             data.results.forEach(cat => cat.items.forEach(item => flatResults.push(item)));
 
-            ctx.font = `${13 * SCALE}px Arial, sans-serif`;
+            ctx.font = `${26 * SCALE}px Arial, sans-serif`; // 2배 크기로 조정
             ctx.textAlign = 'center';
             ctx.textBaseline = 'middle';
             ctx.fillStyle = '#000';
@@ -550,37 +670,60 @@ document.addEventListener('DOMContentLoaded', () => {
             });
 
             // ── 서명 오버레이 (확인자 + 담당교사 두 곳) ──
-            if (signatureDataUrl) {
+            const teacherSig = data.signature || signatureDataUrl;
+            if (teacherSig) {
                 const sigImg = new Image();
                 await new Promise((res, rej) => {
                     sigImg.onload = res;
                     sigImg.onerror = rej;
-                    sigImg.src = signatureDataUrl;
+                    sigImg.src = teacherSig;
                 });
 
                 const SIG_W = 58 * SCALE;
                 const SIG_H = 16 * SCALE;
-                const SIG_X = 460 * SCALE;
+                const SIG_X = 505 * SCALE; // (인) 위치로 이동
 
-                // 확인자(학과부장) : PDF Y≈683
-                ctx.drawImage(sigImg, SIG_X, (PDF_H - 683 - 9) * SCALE, SIG_W, SIG_H);
                 // 담당교사         : PDF Y≈662
                 ctx.drawImage(sigImg, SIG_X, (PDF_H - 662 - 9) * SCALE, SIG_W, SIG_H);
             }
 
+            if (adminSignatureDataUrl) {
+                const adminSigImg = new Image();
+                await new Promise((res, rej) => {
+                    adminSigImg.onload = res;
+                    adminSigImg.onerror = rej;
+                    adminSigImg.src = adminSignatureDataUrl;
+                });
+                const SIG_W = 58 * SCALE;
+                const SIG_H = 16 * SCALE;
+                const SIG_X = 505 * SCALE; 
+                // 확인자(학과부장) : PDF Y≈683
+                ctx.drawImage(adminSigImg, SIG_X, (PDF_H - 683 - 9) * SCALE, SIG_W, SIG_H);
+            }
+
             // 캔버스 → img 태그로 변환 후 printArea에 삽입
             const imgSrc = cvs.toDataURL('image/png', 0.95);
-            elements.printArea.innerHTML =
-                `<img src="${imgSrc}" style="width:100%;display:block;margin:0;padding:0;" />`;
+            
+            if (!isBulk) container.innerHTML = '';
+            const imgEl = document.createElement('img');
+            imgEl.src = imgSrc;
+            imgEl.style.width = '100%';
+            imgEl.style.display = 'block';
+            imgEl.style.margin = '0';
+            imgEl.style.padding = '0';
+            if (isBulk) imgEl.style.pageBreakAfter = 'always';
+            
+            container.appendChild(imgEl);
 
         } catch (err) {
             console.error('PDF 렌더링 실패, HTML 방식으로 전환:', err);
-            renderHtmlPrintLayout(data);
+            renderHtmlPrintLayout(data, container, isBulk);
         }
     }
 
     // HTML 방식 폴백 출력 (PDF 로드 실패 시)
-    function renderHtmlPrintLayout(data) {
+    function renderHtmlPrintLayout(data, container, isBulk) {
+        const teacherSig = data.signature || signatureDataUrl;
         const html = `
             <div class="print-header">
                 <h1>2026학년도 직업계고 실습실별 안전점검표</h1>
@@ -592,14 +735,19 @@ document.addEventListener('DOMContentLoaded', () => {
                 </tr>
                 <tr>
                     <th>학 과 명</th><td>${data.info.dept}</td>
-                    <th>확 인 자</th><td>학과부장 ${data.info.head} <span style="float:right">(인)</span></td>
+                    <th style="position:relative;">확 인 자</th>
+                    <td style="position:relative;">
+                        학과부장 ${data.info.head}
+                        ${adminSignatureDataUrl ? `<img src="${adminSignatureDataUrl}" style="position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);height:40px;z-index:10;" />` : ''}
+                        <span style="float:right">(인)</span>
+                    </td>
                 </tr>
                 <tr>
                     <th>실습실명</th><td>${data.info.room}</td>
                     <th style="position:relative;">담당교사</th>
                     <td style="position:relative;">
                         ${data.info.teacher}
-                        ${signatureDataUrl ? `<img src="${signatureDataUrl}" style="position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);height:40px;z-index:10;" />` : ''}
+                        ${teacherSig ? `<img src="${teacherSig}" style="position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);height:40px;z-index:10;" />` : ''}
                         <span style="float:right">(인)</span>
                     </td>
                 </tr>
@@ -631,7 +779,14 @@ document.addEventListener('DOMContentLoaded', () => {
                 </tbody>
             </table>
             <div class="print-footer">※ 해당없는 경우 "-" 표시, 학교별 실습실별 작성 후 자체 보관</div>
+        </div>
         `;
-        elements.printArea.innerHTML = html;
+        
+        const wrapper = document.createElement('div');
+        wrapper.innerHTML = html;
+        if (isBulk) wrapper.style.pageBreakAfter = 'always';
+        
+        if (!isBulk) container.innerHTML = '';
+        container.appendChild(wrapper);
     }
 });
