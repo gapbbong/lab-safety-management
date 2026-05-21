@@ -294,11 +294,13 @@ document.addEventListener('DOMContentLoaded', () => {
 
         let submittedData = [];
         try {
-            if (window.firebaseDB) {
-                submittedData = await window.firebaseDB.getChecklistsForDate(m, d);
+            if (!window.firebaseDB) {
+                throw new Error("Firebase DB가 연결되지 않았습니다.");
             }
+            submittedData = await window.firebaseDB.getChecklistsForDate(m, d);
         } catch (e) {
             console.error('Firebase 로드 실패', e);
+            alert('제출 현황을 불러오지 못했습니다: ' + (e.message || e));
         }
 
         // 일괄 서명 복구 판별
@@ -484,14 +486,15 @@ document.addEventListener('DOMContentLoaded', () => {
                     }
 
                     try {
-                        if (window.firebaseDB) {
-                            await window.firebaseDB.saveAdminBulkApproval(m, d, window.currentSubmittedData, adminBulkSignatureDataUrl);
-                            alert('일괄 결재 서명이 저장되었습니다.');
-                            generateAdminLinks();
+                        if (!window.firebaseDB) {
+                            throw new Error("Firebase DB가 연결되지 않았습니다.");
                         }
+                        await window.firebaseDB.saveAdminBulkApproval(m, d, window.currentSubmittedData, adminBulkSignatureDataUrl);
+                        alert('일괄 결재 서명이 저장되었습니다.');
+                        generateAdminLinks();
                     } catch (err) {
                         console.error("일괄 결재 저장 에러:", err);
-                        alert('일괄 결재 저장 중 에러가 발생했습니다.');
+                        alert('일괄 결재 저장 중 에러가 발생했습니다: ' + (err.message || err));
                     }
                 });
             }
@@ -503,15 +506,16 @@ document.addEventListener('DOMContentLoaded', () => {
                     if (!confirm('정말로 일괄 결재를 취소하시겠습니까?')) return;
 
                     try {
-                        if (window.firebaseDB) {
-                            await window.firebaseDB.deleteAdminBulkApproval(m, d, window.currentSubmittedData);
-                            alert('일괄 결재가 취소되었습니다.');
-                            adminBulkSignatureDataUrl = null;
-                            generateAdminLinks();
+                        if (!window.firebaseDB) {
+                            throw new Error("Firebase DB가 연결되지 않았습니다.");
                         }
+                        await window.firebaseDB.deleteAdminBulkApproval(m, d, window.currentSubmittedData);
+                        alert('일괄 결재가 취소되었습니다.');
+                        adminBulkSignatureDataUrl = null;
+                        generateAdminLinks();
                     } catch (err) {
                         console.error("일괄 결재 취소 에러:", err);
-                        alert('일괄 결재 취소 중 에러가 발생했습니다.');
+                        alert('일괄 결재 취소 중 에러가 발생했습니다: ' + (err.message || err));
                     }
                 });
             }
@@ -862,12 +866,13 @@ document.addEventListener('DOMContentLoaded', () => {
         }
 
         try {
-            if (window.firebaseDB) {
-                await window.firebaseDB.saveChecklist(finalData);
-                alert(`${currentInfo.room} 안전점검표가 Firebase DB에 성공적으로 저장되었습니다.`);
+            if (!window.firebaseDB) {
+                throw new Error("Firebase DB가 연결되지 않았습니다. 인터넷이나 방화벽 상태를 확인해주세요.");
             }
+            await window.firebaseDB.saveChecklist(finalData);
+            alert(`${currentInfo.room} 안전점검표가 Firebase DB에 성공적으로 저장되었습니다.`);
         } catch (e) {
-            alert('저장 중 오류가 발생했습니다. 다시 시도해주세요.');
+            alert('저장 중 오류가 발생했습니다: ' + (e.message || e));
             return;
         }
 
@@ -1040,15 +1045,16 @@ document.addEventListener('DOMContentLoaded', () => {
             }
 
             try {
-                if (window.firebaseDB) {
-                    await window.firebaseDB.saveAdminApproval(m, d, currentApprovingLab.dept, currentApprovingLab.room, indivSig);
-                    alert(`${currentApprovingLab.room} 결재가 완료되었습니다.`);
-                    closeAdminApprovalModal();
-                    generateAdminLinks();
+                if (!window.firebaseDB) {
+                    throw new Error("Firebase DB가 연결되지 않았습니다.");
                 }
+                await window.firebaseDB.saveAdminApproval(m, d, currentApprovingLab.dept, currentApprovingLab.room, indivSig);
+                alert(`${currentApprovingLab.room} 결재가 완료되었습니다.`);
+                closeAdminApprovalModal();
+                generateAdminLinks();
             } catch (err) {
                 console.error("개별 결재 저장 에러:", err);
-                alert('결재 저장 중 에러가 발생했습니다.');
+                alert('결재 저장 중 에러가 발생했습니다: ' + (err.message || err));
             }
         });
     }
@@ -1060,14 +1066,15 @@ document.addEventListener('DOMContentLoaded', () => {
         const d = elements.dayInput.value;
 
         try {
-            if (window.firebaseDB) {
-                await window.firebaseDB.deleteAdminApproval(m, d, dept, room);
-                alert(`${room} 결재가 취소되었습니다.`);
-                generateAdminLinks();
+            if (!window.firebaseDB) {
+                throw new Error("Firebase DB가 연결되지 않았습니다.");
             }
+            await window.firebaseDB.deleteAdminApproval(m, d, dept, room);
+            alert(`${room} 결재가 취소되었습니다.`);
+            generateAdminLinks();
         } catch (err) {
             console.error("개별 결재 취소 에러:", err);
-            alert('결재 취소 중 에러가 발생했습니다.');
+            alert('결재 취소 중 에러가 발생했습니다: ' + (err.message || err));
         }
     };
 
