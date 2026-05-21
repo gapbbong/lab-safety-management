@@ -211,27 +211,42 @@ document.addEventListener('DOMContentLoaded', () => {
         linksBody.innerHTML = '';
         const baseUrl = window.location.href.split('?')[0];
         
+        let allRooms = [];
         Object.keys(safetyData.departments).forEach(deptName => {
             const dept = safetyData.departments[deptName];
             dept.rooms.forEach(room => {
-                const params = new URLSearchParams({ m, d, dept: deptName, room: room.name });
-                const finalUrl = `${baseUrl}?${params.toString()}`;
-                
-                const isSubmitted = submittedData.some(item => item.info && item.info.dept === deptName && item.info.room === room.name);
-                const statusBadge = isSubmitted ? '<span style="color:green;font-weight:bold;">✅ 제출됨</span>' : '<span style="color:red;">❌ 미제출</span>';
-
-                const tr = document.createElement('tr');
-                tr.innerHTML = `
-                    <td style="border: 1px solid var(--border-color); padding: 0.75rem; text-align:center;">${statusBadge}</td>
-                    <td style="border: 1px solid var(--border-color); padding: 0.75rem;">${deptName}</td>
-                    <td style="border: 1px solid var(--border-color); padding: 0.75rem;"><strong>${room.name}</strong></td>
-                    <td style="border: 1px solid var(--border-color); padding: 0.75rem;">${room.teacher}</td>
-                    <td style="border: 1px solid var(--border-color); padding: 0.75rem;">
-                        <button class="btn btn-primary" style="padding: 0.25rem 0.5rem; font-size: 0.8rem;" onclick="navigator.clipboard.writeText('${finalUrl}').then(() => {this.innerText='✅ 복사완료!'; setTimeout(()=>this.innerText='📋 복사하기',2000)})">📋 복사하기</button>
-                    </td>
-                `;
-                linksBody.appendChild(tr);
+                allRooms.push({ deptName, room });
             });
+        });
+        
+        // 최지은 선생님 행을 가장 위로 정렬
+        allRooms.sort((a, b) => {
+            if (a.room.teacher === '최지은' && b.room.teacher !== '최지은') return -1;
+            if (a.room.teacher !== '최지은' && b.room.teacher === '최지은') return 1;
+            return 0;
+        });
+
+        allRooms.forEach(({ deptName, room }) => {
+            const params = new URLSearchParams({ m, d, dept: deptName, room: room.name });
+            const finalUrl = `${baseUrl}?${params.toString()}`;
+            
+            const isSubmitted = submittedData.some(item => item.info && item.info.dept === deptName && item.info.room === room.name);
+            const statusBadge = isSubmitted ? '<span style="color:green;font-weight:bold;">✅ 제출됨</span>' : '<span style="color:red;">❌ 미제출</span>';
+
+            const tr = document.createElement('tr');
+            tr.innerHTML = `
+                <td style="border: 1px solid var(--border-color); padding: 0.75rem; text-align:center;">${statusBadge}</td>
+                <td style="border: 1px solid var(--border-color); padding: 0.75rem;">${deptName}</td>
+                <td style="border: 1px solid var(--border-color); padding: 0.75rem;"><strong>${room.name}</strong></td>
+                <td style="border: 1px solid var(--border-color); padding: 0.75rem;">${room.teacher}</td>
+                <td style="border: 1px solid var(--border-color); padding: 0.75rem;">
+                    <div style="display:flex; gap:0.4rem; flex-wrap:wrap;">
+                        <button class="btn btn-primary" style="padding: 0.25rem 0.5rem; font-size: 0.8rem;" onclick="navigator.clipboard.writeText('${finalUrl}').then(() => {this.innerText='✅ 복사완료!'; setTimeout(()=>this.innerText='📋 복사하기',2000)})">📋 복사하기</button>
+                        <a href="${finalUrl}" target="_blank" class="btn btn-outline" style="padding: 0.25rem 0.5rem; font-size: 0.8rem; text-decoration:none; display:inline-flex; align-items:center;">🔗 열기</a>
+                    </div>
+                </td>
+            `;
+            linksBody.appendChild(tr);
         });
 
         window.currentSubmittedData = submittedData;
@@ -386,59 +401,7 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
 
-    // Admin Signature Pad Logic
-    const adminCanvas = document.getElementById('adminSignaturePad');
-    if (adminCanvas) {
-        const actx = adminCanvas.getContext('2d');
-        const btnClearAdminSignature = document.getElementById('btnClearAdminSignature');
-        actx.clearRect(0, 0, adminCanvas.width, adminCanvas.height);
-        
-        function getAdminPointerPos(e) {
-            const rect = adminCanvas.getBoundingClientRect();
-            const clientX = e.touches ? e.touches[0].clientX : e.clientX;
-            const clientY = e.touches ? e.touches[0].clientY : e.clientY;
-            return { x: clientX - rect.left, y: clientY - rect.top };
-        }
-        
-        function startAdminDrawing(e) {
-            e.preventDefault();
-            isAdminDrawing = true;
-            const pos = getAdminPointerPos(e);
-            actx.beginPath();
-            actx.moveTo(pos.x, pos.y);
-        }
-        
-        function drawAdmin(e) {
-            if (!isAdminDrawing) return;
-            e.preventDefault();
-            const pos = getAdminPointerPos(e);
-            actx.lineTo(pos.x, pos.y);
-            actx.strokeStyle = '#0f172a';
-            actx.lineWidth = 2;
-            actx.lineCap = 'round';
-            actx.stroke();
-        }
-        
-        function stopAdminDrawing() {
-            if (!isAdminDrawing) return;
-            isAdminDrawing = false;
-            actx.closePath();
-            adminSignatureDataUrl = adminCanvas.toDataURL("image/png");
-        }
-        
-        adminCanvas.addEventListener('mousedown', startAdminDrawing);
-        adminCanvas.addEventListener('mousemove', drawAdmin);
-        adminCanvas.addEventListener('mouseup', stopAdminDrawing);
-        adminCanvas.addEventListener('mouseout', stopAdminDrawing);
-        adminCanvas.addEventListener('touchstart', startAdminDrawing, { passive: false });
-        adminCanvas.addEventListener('touchmove', drawAdmin, { passive: false });
-        adminCanvas.addEventListener('touchend', stopAdminDrawing);
-        
-        btnClearAdminSignature.addEventListener('click', () => {
-            actx.clearRect(0, 0, adminCanvas.width, adminCanvas.height);
-            adminSignatureDataUrl = null;
-        });
-    }
+    // Admin Signature Pad Logic 삭제됨
 
     // Update Progress
     function updateProgress() {
@@ -540,11 +503,18 @@ document.addEventListener('DOMContentLoaded', () => {
                 alert('제출된 점검표가 없습니다.');
                 return;
             }
-            if (!adminSignatureDataUrl) {
-                if (!confirm('부장님 서명이 입력되지 않았습니다. 서명 없이 일괄 인쇄하시겠습니까?')) {
+            
+            // 최지은 선생님 서명을 관리자 서명으로 사용
+            const headSubmission = window.currentSubmittedData.find(item => item.info && item.info.teacher === '최지은');
+            if (headSubmission && headSubmission.signature) {
+                adminSignatureDataUrl = headSubmission.signature;
+            } else {
+                adminSignatureDataUrl = null;
+                if (!confirm('최지은 선생님(부장님)의 점검표가 제출되지 않아 부장님 서명이 없습니다.\n서명 없이 일괄 인쇄하시겠습니까?')) {
                     return;
                 }
             }
+
             elements.printArea.innerHTML = '<p style="text-align:center;padding:30px;font-size:1rem;">🔄 전체 PDF 렌더링 중...</p>';
             
             const tempDiv = document.createElement('div');
