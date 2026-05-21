@@ -1,0 +1,181 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>실습실 안전점검표 | 경성전자고</title>
+  <meta name="description" content="경성전자고 직업계고 실습실별 안전점검표 온라인 작성 시스템">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="css/styles.css">
+</head>
+<body>
+  <div id="app">
+    <!-- 헤더 -->
+    <header class="header">
+      <div class="header-inner">
+        <div class="header-brand">
+          <span class="header-icon">🛡️</span>
+          <div>
+            <h1 class="header-title">실습실 안전점검표</h1>
+            <p class="header-sub">2026학년도 경성전자고 직업계고</p>
+          </div>
+        </div>
+        <!-- 우측 상단 버튼 제거 (단일 페이지화) -->
+      </div>
+    </header>
+
+    <!-- Step 1: 정보 입력 -->
+    <section id="step-info" class="section">
+      <div class="card card-info">
+        <div class="card-header">
+          <span class="step-badge">STEP 1</span>
+          <h2>점검 정보 입력</h2>
+        </div>
+        <div class="form-grid">
+          <div class="form-group">
+            <label for="inspectionMonth">점검 월</label>
+            <select id="inspectionMonth">
+              <option value="">월 선택</option>
+              <option value="3">3월</option>
+              <option value="4">4월</option>
+              <option value="5">5월</option>
+              <option value="6">6월</option>
+              <option value="7">7월</option>
+              <option value="8">8월</option>
+              <option value="9">9월</option>
+              <option value="10">10월</option>
+              <option value="11">11월</option>
+              <option value="12">12월</option>
+              <option value="1">1월</option>
+              <option value="2">2월</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label for="inspectionDay">점검 일</label>
+            <input type="number" id="inspectionDay" min="1" max="31" placeholder="일">
+          </div>
+          <div class="form-group" style="display:none;">
+            <label for="department">학과</label>
+            <select id="department">
+              <option value="">학과 선택</option>
+              <option value="IoT전기과">IoT전기과</option>
+              <option value="게임콘텐츠과">게임콘텐츠과</option>
+            </select>
+          </div>
+          <div class="form-group" style="display:none;">
+            <label for="labRoom">실습실</label>
+            <select id="labRoom" disabled>
+              <option value="">학과를 먼저 선택하세요</option>
+            </select>
+          </div>
+        </div>
+        <div class="form-grid form-grid-2" style="display:none;">
+          <div class="form-group">
+            <label for="deptHead">확인자 (학과부장)</label>
+            <input type="text" id="deptHead" placeholder="예: 최지은" readonly>
+          </div>
+          <div class="form-group">
+            <label for="teacher">담당교사</label>
+            <input type="text" id="teacher" placeholder="자동 입력" readonly>
+          </div>
+        </div>
+        <button class="btn btn-primary btn-lg" id="btnStartCheck" disabled>
+          <span id="btnStartText">🛠️ 관리자 링크 생성</span>
+        </button>
+      </div>
+
+      <!-- 관리자용 링크 리스트 (초기엔 숨김) -->
+      <div class="card hidden" id="linksCard" style="margin-top: 2rem;">
+        <div class="card-header">
+          <h2>교사별 점검 링크</h2>
+        </div>
+        <table class="link-table" style="width: 100%; border-collapse: collapse; margin-top: 1rem;">
+          <thead>
+            <tr>
+              <th style="border: 1px solid var(--border-color); padding: 0.75rem; background-color: var(--bg-color);">학과</th>
+              <th style="border: 1px solid var(--border-color); padding: 0.75rem; background-color: var(--bg-color);">실습실</th>
+              <th style="border: 1px solid var(--border-color); padding: 0.75rem; background-color: var(--bg-color);">담당교사</th>
+              <th style="border: 1px solid var(--border-color); padding: 0.75rem; background-color: var(--bg-color);">초간편 링크 복사</th>
+            </tr>
+          </thead>
+          <tbody id="linksBody">
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <!-- Step 2: 점검표 입력 -->
+    <section id="step-checklist" class="section hidden">
+      <div class="card">
+        <div class="card-header">
+          <span class="step-badge">STEP 2</span>
+          <h2>안전점검 항목</h2>
+          <div class="check-info" id="checkInfo"></div>
+        </div>
+
+        <div class="checklist-progress">
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.5rem;">
+            <span class="progress-text" id="progressText" style="margin-bottom: 0;">0 / 22 항목 완료</span>
+            <button class="btn btn-outline" id="btnCheckAllGood" type="button" style="padding: 0.25rem 0.75rem; font-size: 0.875rem; background-color: white; border: 1px solid var(--primary-color); color: var(--primary-color);">✅ 모두 '양호' 체크</button>
+          </div>
+          <div class="progress-bar">
+            <div class="progress-fill" id="progressFill"></div>
+          </div>
+        </div>
+
+        <form id="checklistForm">
+          <!-- 점검항목 테이블은 app.js에서 동적 생성 -->
+        </form>
+
+        <!-- 서명 영역 -->
+        <div class="signature-section" style="margin-top: 2rem; padding: 1.5rem; background-color: var(--bg-color); border-radius: 8px; border: 1px solid var(--border-color);">
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.5rem;">
+            <h3 style="font-size: 1rem; color: var(--text-main);">✍️ 담당교사 서명</h3>
+            <button class="btn btn-outline" id="btnClearSignature" style="padding: 0.25rem 0.75rem; font-size: 0.875rem;">지우기</button>
+          </div>
+          <canvas id="signaturePad" width="300" height="150" style="background: white; border: 1px solid #cbd5e1; border-radius: 4px; touch-action: none; display: block; margin: 0 auto;"></canvas>
+          <p style="text-align: center; font-size: 0.8rem; color: var(--text-muted); margin-top: 0.5rem;">위 박스 안에 마우스나 터치로 서명해주세요.</p>
+        </div>
+
+        <div class="action-bar">
+          <button class="btn btn-secondary" id="btnBack" type="button">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M19 12H5M12 19l-7-7 7-7"/></svg>
+            뒤로
+          </button>
+          <button class="btn btn-success btn-lg" id="btnSave" type="button">
+            💾 저장하기
+          </button>
+          <button class="btn btn-primary" id="btnExport" type="button">
+            📤 내보내기 (JSON)
+          </button>
+          <button class="btn btn-secondary" id="btnExportPdfStep2" type="button" style="background-color: #64748b; color: white; border: none;">
+            🖨️ PDF 인쇄
+          </button>
+        </div>
+      </div>
+    </section>
+
+    <!-- Step 3: 저장 완료 -->
+    <section id="step-done" class="section hidden">
+      <div class="card card-done">
+        <div class="done-icon">✅</div>
+        <h2>점검 완료!</h2>
+        <p class="done-desc" id="doneDesc"></p>
+        <div class="done-actions">
+          <button class="btn btn-primary btn-lg" id="btnNewCheck">🔄 다른 실습실 점검하기</button>
+          <button class="btn btn-secondary" id="btnExportDone">📤 JSON 내보내기</button>
+          <button class="btn btn-outline" id="btnPrintDone">🖨️ PDF 출력 (인쇄)</button>
+        </div>
+      </div>
+    </section>
+
+    <!-- 인쇄용 레이아웃 (화면에서는 숨김) -->
+    <div id="printArea" class="print-area"></div>
+  </div>
+
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+  <script src="js/data.js"></script>
+  <script src="js/app.js"></script>
+</body>
+</html>
