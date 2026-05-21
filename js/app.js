@@ -22,7 +22,6 @@ document.addEventListener('DOMContentLoaded', () => {
         
         btnBack: document.getElementById('btnBack'),
         btnSave: document.getElementById('btnSave'),
-        btnExport: document.getElementById('btnExport'),
         btnExportPdfStep2: document.getElementById('btnExportPdfStep2'),
         btnCheckAllGood: document.getElementById('btnCheckAllGood'),
         
@@ -31,7 +30,6 @@ document.addEventListener('DOMContentLoaded', () => {
         
         doneDesc: document.getElementById('doneDesc'),
         btnNewCheck: document.getElementById('btnNewCheck'),
-        btnExportDone: document.getElementById('btnExportDone'),
         btnPrintDone: document.getElementById('btnPrintDone'),
         
         printArea: document.getElementById('printArea')
@@ -179,13 +177,17 @@ document.addEventListener('DOMContentLoaded', () => {
         
         elements.stepInfo.classList.add('hidden');
         elements.stepChecklist.classList.remove('hidden');
+        if (elements.btnBack) elements.btnBack.classList.remove('hidden');
     });
 
     // Step 2 -> Step 1 (Back)
-    elements.btnBack.addEventListener('click', () => {
-        elements.stepChecklist.classList.add('hidden');
-        elements.stepInfo.classList.remove('hidden');
-    });
+    if (elements.btnBack) {
+        elements.btnBack.addEventListener('click', () => {
+            elements.stepChecklist.classList.add('hidden');
+            elements.stepInfo.classList.remove('hidden');
+            elements.btnBack.classList.add('hidden');
+        });
+    }
 
     // Generate Links for Admin
     async function generateAdminLinks() {
@@ -519,19 +521,7 @@ document.addEventListener('DOMContentLoaded', () => {
         await renderPrintLayout(finalData, false);
     });
 
-    // JSON Export
-    function exportJSON() {
-        const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(getFinalData(), null, 2));
-        const downloadAnchorNode = document.createElement('a');
-        downloadAnchorNode.setAttribute("href", dataStr);
-        downloadAnchorNode.setAttribute("download", `안전점검표_${currentInfo.dept}_${currentInfo.room}_${currentInfo.date}.json`);
-        document.body.appendChild(downloadAnchorNode);
-        downloadAnchorNode.click();
-        downloadAnchorNode.remove();
-    }
-
-    elements.btnExport.addEventListener('click', exportJSON);
-    elements.btnExportDone.addEventListener('click', exportJSON);
+    // JSON Export 삭제됨
 
     if (elements.btnExportPdfStep2) {
         elements.btnExportPdfStep2.addEventListener('click', async () => {
@@ -738,7 +728,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     <th style="position:relative;">확 인 자</th>
                     <td style="position:relative;">
                         학과부장 ${data.info.head}
-                        ${adminSignatureDataUrl ? `<img src="${adminSignatureDataUrl}" style="position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);height:40px;z-index:10;" />` : ''}
+                        ${adminSignatureDataUrl ? `<img src="${adminSignatureDataUrl}" style="position:absolute;top:50%;right:5px;transform:translateY(-50%);height:40px;z-index:10;" />` : ''}
                         <span style="float:right">(인)</span>
                     </td>
                 </tr>
@@ -747,7 +737,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     <th style="position:relative;">담당교사</th>
                     <td style="position:relative;">
                         ${data.info.teacher}
-                        ${teacherSig ? `<img src="${teacherSig}" style="position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);height:40px;z-index:10;" />` : ''}
+                        ${teacherSig ? `<img src="${teacherSig}" style="position:absolute;top:50%;right:5px;transform:translateY(-50%);height:40px;z-index:10;" />` : ''}
                         <span style="float:right">(인)</span>
                     </td>
                 </tr>
