@@ -340,6 +340,10 @@ document.addEventListener('DOMContentLoaded', () => {
                     radio.dispatchEvent(new Event('change'));
                 }
             });
+            // 모두 양호 체크 후 자동으로 맨 아래(서명란)까지 스크롤
+            setTimeout(() => {
+                window.scrollTo({ top: document.body.scrollHeight, behavior: 'smooth' });
+            }, 200);
         };
     }
 
@@ -599,16 +603,14 @@ document.addEventListener('DOMContentLoaded', () => {
             ctx.fillText(dateText, 382 * SCALE, (PDF_H - 706) * SCALE);
 
             // ── 체크 결과 오버레이 ─────────────────────
-            // 25개 항목의 PDF Y좌표 (위→아래 순서)
+            // 15개 항목의 PDF Y좌표 (위→아래 순서)
+            // 해당없음 행(소화기, 화공안전 3, 가스안전 4, 기계안전 2)은 건너뜀
             const ITEM_Y = [
                 582, 552,                           // 안전계획 (2)
                 534, 504, 485, 465, 446,            // 일반안전 (5)
-                426, 406, 386,                      // 소방안전 (3)
-                366, 346, 326,                      // 화공안전 (3)
-                306, 286, 266, 247,                 // 가스안전 (4)
-                227, 207,                           // 산업위생 (2)
-                187, 167,                           // 기계안전 (2)
-                147, 127,                           // 전기안전 (2)
+                406, 386,                           // 소방안전 (2) - 소화기(426) 건너뜀
+                227, 207,                           // 산업위생 (2) - 화공/가스 건너뜀
+                147, 127,                           // 전기안전 (2) - 기계안전 건너뜀
                 107, 87                             // 기자재   (2)
             ];
             // 체크 열 중심 X좌표 (PDF pt 단위)
