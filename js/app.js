@@ -1685,7 +1685,7 @@ document.addEventListener('DOMContentLoaded', () => {
             alert('이미 슈퍼 관리자 권한이 활성화되어 있습니다.');
             return;
         }
-        const pwd = prompt('슈퍼 관리자 권한 획득을 위한 비밀번호를 입력하세요. (초기 비밀번호: 1008)');
+        const pwd = prompt('슈퍼 관리자 권한 획득을 위한 비밀번호를 입력하세요.');
         if (pwd === '1008') {
             window.isSuperAdmin = true;
             alert('슈퍼 관리자 권한이 활성화되었습니다. 제출된 항목 옆에 삭제 버튼이 표시됩니다.');
