@@ -66,8 +66,11 @@ document.addEventListener('DOMContentLoaded', () => {
         btnDeptheadPreviewBulkSig: document.getElementById('btnDeptheadPreviewBulkSig'),
         btnDeptheadSaveApproval: document.getElementById('btnDeptheadSaveApproval'),
         btnDeptheadBulkPrint: document.getElementById('btnDeptheadBulkPrint'),
-        btnDeptheadDeleteBulkSig: document.getElementById('btnDeptheadDeleteBulkSig')
+        btnDeptheadDeleteBulkSig: document.getElementById('btnDeptheadDeleteBulkSig'),
+        deptheadIndividualSignatureArea: document.getElementById('deptheadIndividualSignatureArea')
     };
+
+    let individualCanvasHelpers = {};
 
     let currentChecklistState = {};
     let currentInfo = {};
@@ -383,13 +386,152 @@ document.addEventListener('DOMContentLoaded', () => {
 
         if (adminApprovalMode === 'bulk') {
             document.getElementById('deptheadBulkSignatureArea').style.display = 'flex';
+            if (elements.deptheadIndividualSignatureArea) elements.deptheadIndividualSignatureArea.style.display = 'none';
             elements.btnDeptheadSaveApproval.style.display = 'inline-flex';
         } else {
             document.getElementById('deptheadBulkSignatureArea').style.display = 'none';
-            elements.btnDeptheadSaveApproval.style.display = 'none';
+            if (elements.deptheadIndividualSignatureArea) elements.deptheadIndividualSignatureArea.style.display = 'flex';
+            elements.btnDeptheadSaveApproval.style.display = 'inline-flex';
+            renderIndividualSignaturePads();
         }
         
         updateDeptheadSavedOverlayState();
+    }
+
+    function updateIndividualPadsStatus() {
+        Object.keys(individualCanvasHelpers).forEach(padId => {
+            const item = individualCanvasHelpers[padId];
+            let isSubmitted = false;
+            let hasAdminSig = false;
+            if (window.currentSubmittedData) {
+                const submission = window.currentSubmittedData.find(s => s.info && s.info.dept === item.dept && s.info.room === item.room);
+                if (submission) {
+                    isSubmitted = true;
+                    if (submission.adminSignature) hasAdminSig = true;
+                }
+            }
+            
+            const card = document.getElementById(`card_${padId}`);
+            if (card) {
+                const statusBadgeEl = card.querySelector('.indiv-status-badge');
+                if (statusBadgeEl) {
+                    statusBadgeEl.innerHTML = isSubmitted ? '<span class="badge badge-success" style="font-size:0.7rem; padding:0.2rem 0.4rem;">제출완료</span>' : '<span class="badge badge-warning" style="font-size:0.7rem; padding:0.2rem 0.4rem; background-color: var(--danger-color); color: white;">미제출</span>';
+                }
+                const overlayEl = document.getElementById(`${padId}_overlay`);
+                if (overlayEl) {
+                    overlayEl.style.display = hasAdminSig ? 'flex' : 'none';
+                }
+            }
+        });
+    }
+
+    function renderIndividualSignaturePads() {
+        if (!elements.deptheadIndividualSignatureArea) return;
+        if (elements.deptheadIndividualSignatureArea.innerHTML !== '') {
+            updateIndividualPadsStatus();
+            return;
+        }
+        
+        let allRooms = [];
+        Object.keys(safetyData.departments).forEach(deptName => {
+            safetyData.departments[deptName].rooms.forEach(room => {
+                allRooms.push({
+                    deptName: deptName,
+                    roomName: room.name,
+                    teacher: room.teacher
+                });
+            });
+        });
+        
+        const grid = document.createElement('div');
+        grid.style.display = 'grid';
+        grid.style.gridTemplateColumns = 'repeat(auto-fill, minmax(320px, 1fr))';
+        grid.style.gap = '1.5rem';
+        grid.style.width = '100%';
+        
+        allRooms.forEach((room, idx) => {
+            const padId = `indivPad_${idx}`;
+            const cardId = `card_${padId}`;
+            const card = document.createElement('div');
+            card.id = cardId;
+            card.style.display = 'flex';
+            card.style.flexDirection = 'column';
+            card.style.gap = '0.5rem';
+            card.style.padding = '1rem';
+            card.style.border = '1px solid var(--border-color)';
+            card.style.borderRadius = '8px';
+            card.style.backgroundColor = '#f8fafc';
+            
+            card.innerHTML = `
+                <div style="display:flex; justify-content:space-between; align-items:center;">
+                    <div>
+                        <span style="font-weight:600; font-size:0.95rem;">${room.deptName} - ${room.roomName}</span>
+                        <div style="font-size:0.8rem; color:var(--text-muted); margin-top:0.2rem;">${room.teacher} 선생님 <span class="indiv-status-badge"></span></div>
+                    </div>
+                    <div style="display:flex; gap:0.4rem;">
+                        <button class="btn btn-outline btn-indiv-clear" data-idx="${idx}" style="padding:0.25rem 0.5rem; font-size:0.75rem;" type="button">지우기</button>
+                        <button class="btn btn-outline btn-indiv-preview" data-idx="${idx}" style="padding:0.25rem 0.5rem; font-size:0.75rem; border-color:var(--primary-color); color:var(--primary-color);" type="button">미리보기</button>
+                    </div>
+                </div>
+                <div style="position:relative; width:100%; height:130px; display:flex; justify-content:center;">
+                    <canvas id="${padId}" width="300" height="130" style="background: white; border: 1px solid #cbd5e1; border-radius: 4px; touch-action: none; display: block;"></canvas>
+                    <div id="${padId}_overlay" style="display:none; position: absolute; top: 0; left: 0; width: 100%; height: 100%; background: rgba(255,255,255,0.95); align-items: center; justify-content: center; border-radius: 4px; border: 1px solid #cbd5e1; flex-direction: column; gap: 0.5rem; z-index: 10;">
+                      <span class="badge badge-success" style="font-size: 0.9rem; padding: 0.4rem 0.8rem;">✅ 결재 서명 저장됨</span>
+                      <button class="btn btn-outline btn-indiv-delete" data-dept="${room.deptName}" data-room="${room.roomName}" style="padding: 0.2rem 0.5rem; font-size: 0.75rem; border-color: var(--danger-color); color: var(--danger-color);" type="button">서명 취소</button>
+                    </div>
+                </div>
+            `;
+            grid.appendChild(card);
+        });
+        
+        elements.deptheadIndividualSignatureArea.appendChild(grid);
+        
+        allRooms.forEach((room, idx) => {
+            const padId = `indivPad_${idx}`;
+            const canvas = document.getElementById(padId);
+            if (canvas) {
+                const helper = initSignaturePad(canvas, grid.querySelector(`.btn-indiv-clear[data-idx="${idx}"]`));
+                individualCanvasHelpers[padId] = {
+                    helper: helper,
+                    dept: room.deptName,
+                    room: room.roomName
+                };
+                
+                const previewBtn = grid.querySelector(`.btn-indiv-preview[data-idx="${idx}"]`);
+                if (previewBtn) {
+                    previewBtn.addEventListener('click', async () => {
+                        if (window.currentSubmittedData) {
+                            const submission = window.currentSubmittedData.find(s => s.info && s.info.dept === room.deptName && s.info.room === room.roomName);
+                            if (submission) {
+                                const previewData = JSON.parse(JSON.stringify(submission));
+                                if (helper.isSigned()) {
+                                    previewData.adminSignature = canvas.toDataURL("image/png");
+                                }
+                                
+                                elements.previewModalBody.innerHTML = '<p style="text-align:center;padding:30px;font-size:1rem;">🔄 미리보기 생성 중...</p>';
+                                elements.previewModal.classList.remove('hidden');
+                                try {
+                                    await renderPrintLayout(previewData, false, elements.previewModalBody);
+                                } catch (err) {
+                                    elements.previewModalBody.innerHTML = '<p style="text-align:center;padding:30px;color:red;">미리보기를 불러오지 못했습니다.</p>';
+                                }
+                            } else {
+                                alert('아직 제출되지 않은 실습실입니다.');
+                            }
+                        }
+                    });
+                }
+                
+                const deleteBtn = grid.querySelector(`.btn-indiv-delete[data-dept="${room.deptName}"][data-room="${room.roomName}"]`);
+                if (deleteBtn) {
+                    deleteBtn.addEventListener('click', () => {
+                        window.deleteIndividualApproval(room.deptName, room.roomName);
+                    });
+                }
+            }
+        });
+        
+        updateIndividualPadsStatus();
     }
 
     // 현황판 테이블 렌더링 함수
@@ -591,6 +733,9 @@ document.addEventListener('DOMContentLoaded', () => {
         });
 
         window.currentSubmittedData = submittedData;
+        if (adminApprovalMode === 'individual') {
+            updateIndividualPadsStatus();
+        }
     }
 
     if (elements.btnCopyAllLinks) {
@@ -1047,32 +1192,62 @@ document.addEventListener('DOMContentLoaded', () => {
                 return;
             }
 
-            const isEmpty = checkSignatureEmpty(elements.deptheadBulkSignaturePad);
-            if (isEmpty) {
-                alert('서명 패드에 서명을 그려주세요.');
-                return;
-            }
-
-            const signature = elements.deptheadBulkSignaturePad.toDataURL("image/png");
-            const submissions = window.currentSubmittedData || [];
-            
-            if (submissions.length === 0) {
-                alert('제출된 실습실 점검표가 없어 일괄 결재를 적용할 수 없습니다.');
-                return;
-            }
-
-            try {
-                if (!window.firebaseDB) {
-                    throw new Error("Firebase DB가 연결되지 않았습니다.");
+            if (adminApprovalMode === 'bulk') {
+                const isEmpty = checkSignatureEmpty(elements.deptheadBulkSignaturePad);
+                if (isEmpty) {
+                    alert('서명 패드에 서명을 그려주세요.');
+                    return;
                 }
-                await window.firebaseDB.saveAdminBulkApproval(m, d, submissions, signature);
-                adminBulkSignatureDataUrl = signature;
-                alert('모든 제출된 실습실에 일괄 결재가 적용되었습니다.');
-                updateDeptheadSavedOverlayState();
-                generateAdminLinks();
-            } catch (err) {
-                console.error("일괄 결재 저장 에러:", err);
-                alert('일괄 결재 저장 중 에러가 발생했습니다: ' + (err.message || err));
+
+                const signature = elements.deptheadBulkSignaturePad.toDataURL("image/png");
+                const submissions = window.currentSubmittedData || [];
+                
+                if (submissions.length === 0) {
+                    alert('제출된 실습실 점검표가 없어 일괄 결재를 적용할 수 없습니다.');
+                    return;
+                }
+
+                try {
+                    if (!window.firebaseDB) {
+                        throw new Error("Firebase DB가 연결되지 않았습니다.");
+                    }
+                    await window.firebaseDB.saveAdminBulkApproval(m, d, submissions, signature);
+                    adminBulkSignatureDataUrl = signature;
+                    alert('모든 제출된 실습실에 일괄 결재가 적용되었습니다.');
+                    updateDeptheadSavedOverlayState();
+                    generateAdminLinks();
+                } catch (err) {
+                    console.error("일괄 결재 저장 에러:", err);
+                    alert('일괄 결재 저장 중 에러가 발생했습니다: ' + (err.message || err));
+                }
+            } else {
+                // 개별 모드
+                let savedCount = 0;
+                let savePromises = [];
+                Object.values(individualCanvasHelpers).forEach(item => {
+                    if (item.helper.isSigned()) {
+                        const sigData = item.helper.canvas.toDataURL("image/png");
+                        savePromises.push(window.firebaseDB.saveAdminApproval(m, d, item.dept, item.room, sigData));
+                        savedCount++;
+                    }
+                });
+                
+                if (savedCount === 0) {
+                    alert('새로 서명된 실습실이 없습니다.');
+                    return;
+                }
+                
+                try {
+                    await Promise.all(savePromises);
+                    alert(`총 ${savedCount}개의 실습실 점검표에 개별 결재 서명이 저장되었습니다.`);
+                    // 서명 후 캔버스 초기화
+                    Object.values(individualCanvasHelpers).forEach(item => {
+                        if (item.helper.isSigned()) item.helper.clear();
+                    });
+                    generateAdminLinks();
+                } catch(e) {
+                    alert('결재 저장 중 오류가 발생했습니다: ' + (e.message || e));
+                }
             }
         });
     }
