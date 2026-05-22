@@ -12,6 +12,15 @@ const firebaseConfig = {
 firebase.initializeApp(firebaseConfig);
 const db = firebase.firestore();
 
+// 네트워크 연결 확인 및 시간 초과 방지를 위한 Helper
+const DB_TIMEOUT_MS = 6000; // 6초 타임아웃
+const runWithTimeout = (promise, errMsg) => {
+    return Promise.race([
+        promise,
+        new Promise((_, reject) => setTimeout(() => reject(new Error(errMsg)), DB_TIMEOUT_MS))
+    ]);
+};
+
 window.firebaseDB = {
     // 점검표 저장 (교사용)
     saveChecklist: async (data) => {
@@ -20,11 +29,14 @@ window.firebaseDB = {
             // 고유 ID: 월_일_학과_실습실명
             const docId = `${dateStr}_${data.info.dept}_${data.info.room}`;
             
-            await db.collection("checklists").doc(docId).set({
-                ...data,
-                dateStr: dateStr,
-                createdAt: firebase.firestore.FieldValue.serverTimestamp()
-            });
+            await runWithTimeout(
+                db.collection("checklists").doc(docId).set({
+                    ...data,
+                    dateStr: dateStr,
+                    createdAt: firebase.firestore.FieldValue.serverTimestamp()
+                }),
+                "서버 저장 시간 초과\n\n파이어베이스 서버와 통신할 수 없습니다. 학교 방화벽(교육청 망)에서 파이어베이스 연결(firestore.googleapis.com)을 차단했는지 확인해 주세요. 지속적으로 실패할 경우, 'PDF 인쇄' 버튼을 눌러 점검 내용을 백업한 후 관리자에게 문의 바랍니다."
+            );
             console.log("Firebase 저장 성공!");
             return true;
         } catch (e) {
@@ -37,9 +49,12 @@ window.firebaseDB = {
     getChecklistsForDate: async (month, day) => {
         try {
             const dateStr = `${month}_${day}`;
-            const snapshot = await db.collection("checklists")
-                                     .where("dateStr", "==", dateStr)
-                                     .get();
+            const snapshot = await runWithTimeout(
+                db.collection("checklists")
+                  .where("dateStr", "==", dateStr)
+                  .get(),
+                "데이터 불러오기 시간 초과\n\n파이어베이스 서버와 통신할 수 없습니다. 학교 방화벽이나 네트워크 연결을 확인해 주세요."
+            );
             
             const results = [];
             snapshot.forEach(doc => {
@@ -77,10 +92,13 @@ window.firebaseDB = {
     saveAdminApproval: async (month, day, dept, room, signature) => {
         try {
             const docId = `${month}_${day}_${dept}_${room}`;
-            await db.collection("checklists").doc(docId).update({
-                adminSignature: signature,
-                approvedAt: firebase.firestore.FieldValue.serverTimestamp()
-            });
+            await runWithTimeout(
+                db.collection("checklists").doc(docId).update({
+                    adminSignature: signature,
+                    approvedAt: firebase.firestore.FieldValue.serverTimestamp()
+                }),
+                "결재 저장 시간 초과\n\n파이어베이스 서버와 통신할 수 없습니다. 학교 방화벽이나 네트워크 연결을 확인해 주세요."
+            );
             console.log(`${room} 부장 결재 저장 성공!`);
             return true;
         } catch (e) {
@@ -93,10 +111,13 @@ window.firebaseDB = {
     deleteAdminApproval: async (month, day, dept, room) => {
         try {
             const docId = `${month}_${day}_${dept}_${room}`;
-            await db.collection("checklists").doc(docId).update({
-                adminSignature: firebase.firestore.FieldValue.delete(),
-                approvedAt: firebase.firestore.FieldValue.delete()
-            });
+            await runWithTimeout(
+                db.collection("checklists").doc(docId).update({
+                    adminSignature: firebase.firestore.FieldValue.delete(),
+                    approvedAt: firebase.firestore.FieldValue.delete()
+                }),
+                "결재 취소 시간 초과\n\n파이어베이스 서버와 통신할 수 없습니다. 학교 방화벽이나 네트워크 연결을 확인해 주세요."
+            );
             console.log(`${room} 부장 결재 취소 성공!`);
             return true;
         } catch (e) {
@@ -117,7 +138,10 @@ window.firebaseDB = {
                     approvedAt: firebase.firestore.FieldValue.serverTimestamp()
                 });
             });
-            await batch.commit();
+            await runWithTimeout(
+                batch.commit(),
+                "일괄 결재 저장 시간 초과\n\n파이어베이스 서버와 통신할 수 없습니다. 학교 방화벽이나 네트워크 연결을 확인해 주세요."
+            );
             console.log("부장 결재 일괄 저장 성공!");
             return true;
         } catch (e) {
@@ -138,7 +162,10 @@ window.firebaseDB = {
                     approvedAt: firebase.firestore.FieldValue.delete()
                 });
             });
-            await batch.commit();
+            await runWithTimeout(
+                batch.commit(),
+                "일괄 결재 취소 시간 초과\n\n파이어베이스 서버와 통신할 수 없습니다. 학교 방화벽이나 네트워크 연결을 확인해 주세요."
+            );
             console.log("부장 결재 일괄 취소 성공!");
             return true;
         } catch (e) {
