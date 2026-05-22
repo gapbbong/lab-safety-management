@@ -1325,12 +1325,24 @@ document.addEventListener('DOMContentLoaded', () => {
                 // Get the 4 signatures
                 const signatures = random4CanvasHelpers.map(h => h.canvas.toDataURL("image/png"));
                 
-                // For each submission, pick a random signature and save it individually
+                // 4개의 서명이 골고루 배분되도록 서명 풀(Pool) 생성 후 셔플
+                let signaturePool = [];
+                for (let i = 0; i < submissions.length; i++) {
+                    signaturePool.push(signatures[i % signatures.length]);
+                }
+                
+                // Fisher-Yates 셔플 알고리즘으로 풀을 랜덤하게 섞음
+                for (let i = signaturePool.length - 1; i > 0; i--) {
+                    const j = Math.floor(Math.random() * (i + 1));
+                    [signaturePool[i], signaturePool[j]] = [signaturePool[j], signaturePool[i]];
+                }
+                
+                // 각 실습실에 섞인 서명을 하나씩 배정
                 let savedCount = 0;
                 let savePromises = [];
-                submissions.forEach(sub => {
+                submissions.forEach((sub, index) => {
                     if (sub.info && sub.info.dept && sub.info.room) {
-                        const randomSig = signatures[Math.floor(Math.random() * signatures.length)];
+                        const randomSig = signaturePool[index];
                         savePromises.push(window.firebaseDB.saveAdminApproval(m, d, sub.info.dept, sub.info.room, randomSig));
                         savedCount++;
                     }
