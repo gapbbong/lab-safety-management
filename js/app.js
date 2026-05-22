@@ -1469,7 +1469,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
             // ── 날짜 오버레이 ──────────────────────────
             // PDF: 점검일자 셀 오른쪽 (X≈382, Y≈702) -> 706으로 올려서 위치 조정
-            ctx.font = `normal ${12 * SCALE}px 'Malgun Gothic', 'Apple SD Gothic Neo', sans-serif`;
+            ctx.font = `lighter ${11 * SCALE}px 'Malgun Gothic', 'Apple SD Gothic Neo', sans-serif`;
             ctx.fillStyle = '#000';
             ctx.textAlign = 'left';
             ctx.textBaseline = 'middle';
