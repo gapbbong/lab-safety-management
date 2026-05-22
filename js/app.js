@@ -67,10 +67,13 @@ document.addEventListener('DOMContentLoaded', () => {
         btnDeptheadSaveApproval: document.getElementById('btnDeptheadSaveApproval'),
         btnDeptheadBulkPrint: document.getElementById('btnDeptheadBulkPrint'),
         btnDeptheadDeleteBulkSig: document.getElementById('btnDeptheadDeleteBulkSig'),
-        deptheadIndividualSignatureArea: document.getElementById('deptheadIndividualSignatureArea')
+        deptheadIndividualSignatureArea: document.getElementById('deptheadIndividualSignatureArea'),
+        deptheadRandom4SignatureArea: document.getElementById('deptheadRandom4SignatureArea'),
+        random4Grid: document.getElementById('random4Grid')
     };
 
     let individualCanvasHelpers = {};
+    let random4CanvasHelpers = [];
 
     let currentChecklistState = {};
     let currentInfo = {};
@@ -387,12 +390,23 @@ document.addEventListener('DOMContentLoaded', () => {
         if (adminApprovalMode === 'bulk') {
             document.getElementById('deptheadBulkSignatureArea').style.display = 'flex';
             if (elements.deptheadIndividualSignatureArea) elements.deptheadIndividualSignatureArea.style.display = 'none';
+            if (elements.deptheadRandom4SignatureArea) elements.deptheadRandom4SignatureArea.style.display = 'none';
             elements.btnDeptheadSaveApproval.style.display = 'inline-flex';
-        } else {
+            elements.btnDeptheadSaveApproval.disabled = false;
+        } else if (adminApprovalMode === 'individual') {
             document.getElementById('deptheadBulkSignatureArea').style.display = 'none';
+            if (elements.deptheadRandom4SignatureArea) elements.deptheadRandom4SignatureArea.style.display = 'none';
             if (elements.deptheadIndividualSignatureArea) elements.deptheadIndividualSignatureArea.style.display = 'flex';
             elements.btnDeptheadSaveApproval.style.display = 'inline-flex';
+            elements.btnDeptheadSaveApproval.disabled = false;
             renderIndividualSignaturePads();
+        } else if (adminApprovalMode === 'random4') {
+            document.getElementById('deptheadBulkSignatureArea').style.display = 'none';
+            if (elements.deptheadIndividualSignatureArea) elements.deptheadIndividualSignatureArea.style.display = 'none';
+            if (elements.deptheadRandom4SignatureArea) elements.deptheadRandom4SignatureArea.style.display = 'flex';
+            elements.btnDeptheadSaveApproval.style.display = 'inline-flex';
+            elements.btnDeptheadSaveApproval.disabled = true;
+            renderRandom4SignaturePads();
         }
         
         updateDeptheadSavedOverlayState();
@@ -532,6 +546,59 @@ document.addEventListener('DOMContentLoaded', () => {
         });
         
         updateIndividualPadsStatus();
+    }
+
+    function renderRandom4SignaturePads() {
+        if (!elements.random4Grid) return;
+        if (elements.random4Grid.innerHTML !== '') {
+            checkRandom4Signed();
+            return;
+        }
+        
+        for (let i = 0; i < 4; i++) {
+            const padId = `random4Pad_${i}`;
+            const card = document.createElement('div');
+            card.style.display = 'flex';
+            card.style.flexDirection = 'column';
+            card.style.gap = '0.5rem';
+            card.style.padding = '1rem';
+            card.style.border = '1px solid var(--border-color)';
+            card.style.borderRadius = '8px';
+            card.style.backgroundColor = '#f8fafc';
+            
+            card.innerHTML = `
+                <div style="display:flex; justify-content:space-between; align-items:center;">
+                    <span style="font-weight:600; font-size:0.95rem;">서명 타입 ${i + 1}</span>
+                    <button class="btn btn-outline btn-random4-clear" data-idx="${i}" style="padding:0.25rem 0.5rem; font-size:0.75rem;" type="button">지우기</button>
+                </div>
+                <div style="position:relative; width:100%; height:130px; display:flex; justify-content:center;">
+                    <canvas id="${padId}" width="300" height="130" style="background: white; border: 1px solid #cbd5e1; border-radius: 4px; touch-action: none; display: block;"></canvas>
+                </div>
+            `;
+            elements.random4Grid.appendChild(card);
+        }
+        
+        for (let i = 0; i < 4; i++) {
+            const padId = `random4Pad_${i}`;
+            const canvas = document.getElementById(padId);
+            if (canvas) {
+                const checkStatus = () => setTimeout(checkRandom4Signed, 50);
+                canvas.addEventListener('mouseup', checkStatus);
+                canvas.addEventListener('touchend', checkStatus);
+                canvas.addEventListener('mouseout', checkStatus);
+                
+                const helper = initSignaturePad(canvas, elements.random4Grid.querySelector(`.btn-random4-clear[data-idx="${i}"]`), checkRandom4Signed);
+                random4CanvasHelpers.push(helper);
+            }
+        }
+    }
+
+    function checkRandom4Signed() {
+        if (adminApprovalMode !== 'random4') return;
+        const allSigned = random4CanvasHelpers.length === 4 && random4CanvasHelpers.every(h => h.isSigned() || !checkSignatureEmpty(h.canvas));
+        if (elements.btnDeptheadSaveApproval) {
+            elements.btnDeptheadSaveApproval.disabled = !allSigned;
+        }
     }
 
     // 현황판 테이블 렌더링 함수
@@ -1244,6 +1311,42 @@ document.addEventListener('DOMContentLoaded', () => {
                     Object.values(individualCanvasHelpers).forEach(item => {
                         if (item.helper.isSigned()) item.helper.clear();
                     });
+                    generateAdminLinks();
+                } catch(e) {
+                    alert('결재 저장 중 오류가 발생했습니다: ' + (e.message || e));
+                }
+            } else if (adminApprovalMode === 'random4') {
+                const submissions = window.currentSubmittedData || [];
+                if (submissions.length === 0) {
+                    alert('제출된 실습실 점검표가 없어 결재를 적용할 수 없습니다.');
+                    return;
+                }
+                
+                // Get the 4 signatures
+                const signatures = random4CanvasHelpers.map(h => h.canvas.toDataURL("image/png"));
+                
+                // For each submission, pick a random signature and save it individually
+                let savedCount = 0;
+                let savePromises = [];
+                submissions.forEach(sub => {
+                    if (sub.info && sub.info.dept && sub.info.room) {
+                        const randomSig = signatures[Math.floor(Math.random() * signatures.length)];
+                        savePromises.push(window.firebaseDB.saveAdminApproval(m, d, sub.info.dept, sub.info.room, randomSig));
+                        savedCount++;
+                    }
+                });
+                
+                if (savedCount === 0) {
+                    alert('저장할 항목이 없습니다.');
+                    return;
+                }
+                
+                try {
+                    await Promise.all(savePromises);
+                    alert(`총 ${savedCount}개의 실습실 점검표에 랜덤 서명이 일괄 적용되었습니다.`);
+                    // 서명 후 캔버스 초기화
+                    random4CanvasHelpers.forEach(h => h.clear());
+                    checkRandom4Signed();
                     generateAdminLinks();
                 } catch(e) {
                     alert('결재 저장 중 오류가 발생했습니다: ' + (e.message || e));
