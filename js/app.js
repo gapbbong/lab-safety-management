@@ -273,6 +273,7 @@ document.addEventListener('DOMContentLoaded', () => {
     // Inputs Validation
     [elements.monthSelect, elements.dayInput].forEach(el => {
         el.addEventListener('input', validateStep1);
+        el.addEventListener('change', validateStep1);
     });
 
     function validateStep1() {
@@ -1287,7 +1288,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     console.error("일괄 결재 저장 에러:", err);
                     alert('일괄 결재 저장 중 에러가 발생했습니다: ' + (err.message || err));
                 }
-            } else {
+            } else if (adminApprovalMode === 'individual') {
                 // 개별 모드
                 let savedCount = 0;
                 let savePromises = [];
