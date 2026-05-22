@@ -836,9 +836,13 @@ document.addEventListener('DOMContentLoaded', () => {
             const pos = getPointerPos(e);
             ctx.lineTo(pos.x, pos.y);
             ctx.strokeStyle = '#0f172a';
-            ctx.lineWidth = 2;
+            ctx.lineWidth = 2 + Math.random() * 2; // 현재 두께(2)부터 2배(4)까지 랜덤
             ctx.lineCap = 'round';
+            ctx.lineJoin = 'round';
             ctx.stroke();
+            
+            ctx.beginPath();
+            ctx.moveTo(pos.x, pos.y);
         }
         
         function stopDrawing() {
@@ -1452,7 +1456,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
             // ── 날짜 오버레이 ──────────────────────────
             // PDF: 점검일자 셀 오른쪽 (X≈382, Y≈702) -> 706으로 올려서 위치 조정
-            ctx.font = `bold ${12 * SCALE}px 'Malgun Gothic', 'Apple SD Gothic Neo', sans-serif`;
+            ctx.font = `normal ${12 * SCALE}px 'Malgun Gothic', 'Apple SD Gothic Neo', sans-serif`;
             ctx.fillStyle = '#000';
             ctx.textAlign = 'left';
             ctx.textBaseline = 'middle';
