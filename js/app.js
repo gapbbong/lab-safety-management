@@ -551,7 +551,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     function renderRandom4SignaturePads() {
         if (!elements.random4Grid) return;
-        if (elements.random4Grid.innerHTML !== '') {
+        if (elements.random4Grid.children.length > 0) {
             checkRandom4Signed();
             return;
         }
