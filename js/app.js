@@ -1029,10 +1029,6 @@ document.addEventListener('DOMContentLoaded', () => {
     if (elements.btnDeptheadPreviewBulkSig) {
         elements.btnDeptheadPreviewBulkSig.addEventListener('click', async () => {
             const submissions = window.currentSubmittedData || [];
-            if (submissions.length === 0) {
-                alert('미리보기할 제출된 안전점검표가 없습니다.');
-                return;
-            }
 
             const isEmpty = checkSignatureEmpty(elements.deptheadBulkSignaturePad);
             if (isEmpty && !adminBulkSignatureDataUrl) {
@@ -1042,22 +1038,47 @@ document.addEventListener('DOMContentLoaded', () => {
 
             const tempSig = adminBulkSignatureDataUrl || elements.deptheadBulkSignaturePad.toDataURL("image/png");
 
-            elements.previewModalBody.innerHTML = '<p style="text-align:center;padding:30px;font-size:1rem;">🔄 미리보기 생성 중...</p>';
+            elements.previewModalBody.innerHTML = '<p style="text-align:center;padding:30px;font-size:1rem;">🔄 12개 실습실 미리보기 생성 중...</p>';
             elements.previewModal.classList.remove('hidden');
 
             try {
-                const firstSub = { ...submissions[0] };
-                const originalAdminSig = firstSub.adminSignature;
-                firstSub.adminSignature = tempSig;
-
-                await renderPrintLayout(firstSub, false, elements.previewModalBody);
-                firstSub.adminSignature = originalAdminSig;
+                elements.previewModalBody.innerHTML = '';
+                const tempDiv = document.createElement('div');
+                
+                const m = elements.monthSelect.value || "3";
+                const d = elements.dayInput.value || "1";
+                
+                let allRooms = [];
+                Object.keys(safetyData.departments).forEach(deptName => {
+                    const dept = safetyData.departments[deptName];
+                    dept.rooms.forEach(room => {
+                        const matched = submissions.find(s => s.info && s.info.dept === deptName && s.info.room === room.name);
+                        if (matched) {
+                            allRooms.push(matched);
+                        } else {
+                            allRooms.push({
+                                info: { month: m, day: d, dept: deptName, room: room.name, head: dept.head, teacher: room.teacher, date: `2026-${m.padStart(2, '0')}-${d.padStart(2, '0')}` },
+                                results: []
+                            });
+                        }
+                    });
+                });
+                
+                // 모든 실습실에 일괄 서명을 대입하여 렌더링
+                for (const sub of allRooms) {
+                    const clonedSub = { ...sub };
+                    clonedSub.adminSignature = tempSig;
+                    await renderPrintLayout(clonedSub, true, tempDiv);
+                }
+                
+                elements.previewModalBody.appendChild(tempDiv);
             } catch (err) {
                 console.error("일괄 결재 미리보기 렌더링 실패:", err);
                 elements.previewModalBody.innerHTML = '<p style="text-align:center;padding:30px;color:red;">미리보기를 불러오지 못했습니다.</p>';
             }
         });
     }
+
 
     // 학과부장 일괄 인쇄 버튼
     if (elements.btnDeptheadBulkPrint) {
@@ -1182,8 +1203,28 @@ document.addEventListener('DOMContentLoaded', () => {
 
     if (elements.btnBulkPrint) {
         elements.btnBulkPrint.addEventListener('click', async () => {
-            if (!window.currentSubmittedData || window.currentSubmittedData.length === 0) {
-                alert('제출된 점검표가 없습니다.');
+            const m = elements.monthSelect.value || "3";
+            const d = elements.dayInput.value || "1";
+            const submissions = window.currentSubmittedData || [];
+            
+            let allRooms = [];
+            Object.keys(safetyData.departments).forEach(deptName => {
+                const dept = safetyData.departments[deptName];
+                dept.rooms.forEach(room => {
+                    const matched = submissions.find(s => s.info && s.info.dept === deptName && s.info.room === room.name);
+                    if (matched) {
+                        allRooms.push(matched);
+                    } else {
+                        allRooms.push({
+                            info: { month: m, day: d, dept: deptName, room: room.name, head: dept.head, teacher: room.teacher, date: `2026-${m.padStart(2, '0')}-${d.padStart(2, '0')}` },
+                            results: []
+                        });
+                    }
+                });
+            });
+
+            if (allRooms.length === 0) {
+                alert('인쇄할 데이터가 없습니다.');
                 return;
             }
             
@@ -1196,8 +1237,8 @@ document.addEventListener('DOMContentLoaded', () => {
                     confirmMsg = '일괄 결재 서명이 저장되지 않았습니다.\n부장 결재 서명 없이 일괄 인쇄하시겠습니까?';
                 }
             } else {
-                // 개별 결재 모드일 때, 제출된 모든 문서 중 부장 서명이 하나라도 누락되었는지 체크
-                const incomplete = window.currentSubmittedData.some(doc => !doc.adminSignature);
+                // 개별 결재 모드일 때, 모든 12개 실습실 중 부장 서명이 하나라도 누락되었는지 체크
+                const incomplete = allRooms.some(doc => !doc.adminSignature);
                 if (incomplete) {
                     hasMissingSignature = true;
                     confirmMsg = '부장 결재가 완료되지 않은 실습실이 있습니다.\n일부 결재 서명 없이 일괄 인쇄하시겠습니까?';
@@ -1214,8 +1255,12 @@ document.addEventListener('DOMContentLoaded', () => {
             
             try {
                 const tempDiv = document.createElement('div');
-                for (const data of window.currentSubmittedData) {
-                    await renderPrintLayout(data, true, tempDiv);
+                for (const data of allRooms) {
+                    const clonedSub = { ...data };
+                    if (adminApprovalMode === 'bulk' && adminBulkSignatureDataUrl) {
+                        clonedSub.adminSignature = adminBulkSignatureDataUrl;
+                    }
+                    await renderPrintLayout(clonedSub, true, tempDiv);
                 }
                 elements.printArea.innerHTML = '';
                 elements.printArea.appendChild(tempDiv);
@@ -1462,11 +1507,9 @@ document.addEventListener('DOMContentLoaded', () => {
             }
 
             // 부장 서명 분기 적용 (일괄 모드 vs 개별 모드)
-            let currentAdminSig = null;
-            if (adminApprovalMode === 'bulk') {
+            let currentAdminSig = data.adminSignature || null;
+            if (!currentAdminSig && adminApprovalMode === 'bulk') {
                 currentAdminSig = adminBulkSignatureDataUrl;
-            } else {
-                currentAdminSig = data.adminSignature || null;
             }
 
             if (currentAdminSig) {
@@ -1506,7 +1549,10 @@ document.addEventListener('DOMContentLoaded', () => {
     // HTML 방식 폴백 출력 (PDF 로드 실패 시)
     function renderHtmlPrintLayout(data, container, isBulk) {
         const teacherSig = data.signature || signatureDataUrl;
-        const currentAdminSig = adminApprovalMode === 'bulk' ? adminBulkSignatureDataUrl : data.adminSignature;
+        let currentAdminSig = data.adminSignature || null;
+        if (!currentAdminSig && adminApprovalMode === 'bulk') {
+            currentAdminSig = adminBulkSignatureDataUrl;
+        }
         const html = `
             <div class="print-header">
                 <h1>2026학년도 직업계고 실습실별 안전점검표</h1>
