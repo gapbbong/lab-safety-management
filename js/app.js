@@ -612,16 +612,28 @@ document.addEventListener('DOMContentLoaded', () => {
             
             category.items.forEach((item, itemIndex) => {
                 const itemId = `item_${catIndex}_${itemIndex}`;
-                currentChecklistState[itemId] = { status: null, notes: '' };
+                const isNAOnly = (catIndex === 1 && itemIndex === 1) || (catIndex === 3 && itemIndex === 1);
+                
+                currentChecklistState[itemId] = { status: isNAOnly ? '해당없음' : null, notes: '' };
                 
                 const tr = document.createElement('tr');
-                tr.innerHTML = `
-                    <td class="item-desc">${item}</td>
-                    <td class="text-center"><input type="radio" name="${itemId}" value="양호"></td>
-                    <td class="text-center"><input type="radio" name="${itemId}" value="불량"></td>
-                    <td class="text-center"><input type="radio" name="${itemId}" value="해당없음"></td>
-                    <td><input type="text" class="notes-input" data-id="${itemId}" placeholder="조치사항 입력" disabled></td>
-                `;
+                if (isNAOnly) {
+                    tr.innerHTML = `
+                        <td class="item-desc" style="color:#94a3b8;">${item}</td>
+                        <td class="text-center"></td>
+                        <td class="text-center"></td>
+                        <td class="text-center"><span style="color:#94a3b8;font-weight:bold;">해당없음</span></td>
+                        <td><input type="text" class="notes-input" data-id="${itemId}" placeholder="해당 항목 아님" disabled style="background-color:#f1f5f9;border:1px solid #e2e8f0;"></td>
+                    `;
+                } else {
+                    tr.innerHTML = `
+                        <td class="item-desc">${item}</td>
+                        <td class="text-center"><input type="radio" name="${itemId}" value="양호"></td>
+                        <td class="text-center"><input type="radio" name="${itemId}" value="불량"></td>
+                        <td class="text-center"><input type="radio" name="${itemId}" value="해당없음"></td>
+                        <td><input type="text" class="notes-input" data-id="${itemId}" placeholder="조치사항 입력" disabled></td>
+                    `;
+                }
                 tbody.appendChild(tr);
             });
             
