@@ -25,7 +25,7 @@ document.addEventListener('DOMContentLoaded', () => {
         btnExportPdfStep2: document.getElementById('btnExportPdfStep2'),
         btnCheckAllGood: document.getElementById('btnCheckAllGood'),
         
-        btnRefreshStatus: document.getElementById('btnRefreshStatus'),
+        btnCopyAllLinks: document.getElementById('btnCopyAllLinks'),
         btnBulkPrint: document.getElementById('btnBulkPrint'),
         
         doneDesc: document.getElementById('doneDesc'),
@@ -576,8 +576,53 @@ document.addEventListener('DOMContentLoaded', () => {
         window.currentSubmittedData = submittedData;
     }
 
-    if (elements.btnRefreshStatus) {
-        elements.btnRefreshStatus.addEventListener('click', generateAdminLinks);
+    if (elements.btnCopyAllLinks) {
+        elements.btnCopyAllLinks.addEventListener('click', () => {
+            const m = elements.monthSelect.value;
+            const d = elements.dayInput.value;
+            if (!m || !d) {
+                alert('점검 월과 일을 먼저 선택해주세요.');
+                return;
+            }
+            
+            const baseUrl = window.location.href.split('?')[0];
+            let textToCopy = `📋 ${m}월 ${d}일 실습실 안전점검표 제출 링크\n\n`;
+            
+            let allRooms = [];
+            Object.keys(safetyData.departments).forEach(deptName => {
+                safetyData.departments[deptName].rooms.forEach(room => {
+                    allRooms.push({
+                        deptName: deptName,
+                        roomName: room.name,
+                        teacher: room.teacher
+                    });
+                });
+            });
+            
+            allRooms.sort((a, b) => a.teacher.localeCompare(b.teacher, 'ko'));
+            
+            allRooms.forEach(room => {
+                const params = new URLSearchParams({ m, d, dept: room.deptName, room: room.roomName });
+                const link = `${baseUrl}?${params.toString()}`;
+                textToCopy += `[${room.deptName}] ${room.roomName} - ${room.teacher} 선생님\n${link}\n\n`;
+            });
+            
+            const deptHeadUrl = `${baseUrl}?m=${m}&d=${d}&role=depthead`;
+            const deptNames = Object.keys(safetyData.departments);
+            const deptHeadName = deptNames.length > 0 ? safetyData.departments[deptNames[0]].head : "최지은";
+            textToCopy += `[결재] 학과부장 - ${deptHeadName} 부장님\n${deptHeadUrl}\n`;
+            
+            navigator.clipboard.writeText(textToCopy).then(() => {
+                const originalText = elements.btnCopyAllLinks.innerHTML;
+                elements.btnCopyAllLinks.innerHTML = '✅ 복사 완료!';
+                setTimeout(() => {
+                    elements.btnCopyAllLinks.innerHTML = originalText;
+                }, 2000);
+            }).catch(err => {
+                alert('복사 중 오류가 발생했습니다.');
+                console.error(err);
+            });
+        });
     }
 
     // Render Checklist Form
