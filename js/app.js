@@ -557,6 +557,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     <div style="display:flex; gap:0.2rem; justify-content:center;">
                         <button class="btn btn-primary" style="padding: 0.2rem 0.35rem !important; font-size: 0.75rem !important;" onclick="navigator.clipboard.writeText('${finalUrl}').then(() => {this.innerText='완료'; setTimeout(()=>this.innerText='복사',1500)})">복사</button>
                         <button class="btn btn-outline" style="padding: 0.2rem 0.35rem !important; font-size: 0.75rem !important; display:inline-flex; align-items:center; justify-content:center;" onclick="window.loadChecklistInline('${deptName}', '${room.name}')">열기</button>
+                        ${(window.isSuperAdmin && isSubmitted) ? `<button class="btn btn-danger" style="padding: 0.2rem 0.35rem !important; font-size: 0.75rem !important; background-color: var(--danger-color); color: white; border: none; border-radius: 4px;" onclick="window.deleteSubmission('${deptName}', '${room.name}')">삭제</button>` : ''}
                     </div>
                 `;
 
@@ -1633,5 +1634,66 @@ document.addEventListener('DOMContentLoaded', () => {
         
         if (!isBulk) container.innerHTML = '';
         container.appendChild(wrapper);
+    }
+
+    // 🗑️ 제출 삭제 (슈퍼 관리자용)
+    window.deleteSubmission = async function(dept, room) {
+        if (!confirm(`${room}의 제출 내역을 완전히 삭제하시겠습니까?\n복구할 수 없습니다.`)) return;
+        const m = elements.monthSelect.value;
+        const d = elements.dayInput.value;
+
+        try {
+            if (!window.firebaseDB) {
+                throw new Error("Firebase DB가 연결되지 않았습니다.");
+            }
+            await window.firebaseDB.deleteChecklist(m, d, dept, room);
+            alert(`${room} 제출 내역이 삭제되었습니다.`);
+            generateAdminLinks();
+        } catch (err) {
+            console.error("제출 내역 삭제 에러:", err);
+            alert('삭제 중 에러가 발생했습니다: ' + (err.message || err));
+        }
+    };
+
+    // 🛡️ 슈퍼 관리자 권한 획득 히든 트리거 (단축키 및 클릭)
+    document.addEventListener('keydown', (e) => {
+        // Ctrl + Shift + X 단축키
+        if (e.ctrlKey && e.shiftKey && (e.key === 'x' || e.key === 'X')) {
+            promptSuperAdmin();
+        }
+    });
+
+    let shieldClickCount = 0;
+    let shieldClickTimer = null;
+    const headerIcon = document.querySelector('.header-icon');
+    if (headerIcon) {
+        headerIcon.style.cursor = 'pointer';
+        headerIcon.addEventListener('click', () => {
+            shieldClickCount++;
+            if (shieldClickTimer) clearTimeout(shieldClickTimer);
+            shieldClickTimer = setTimeout(() => { shieldClickCount = 0; }, 1000);
+            
+            if (shieldClickCount >= 3) {
+                shieldClickCount = 0;
+                promptSuperAdmin();
+            }
+        });
+    }
+
+    function promptSuperAdmin() {
+        if (window.isSuperAdmin) {
+            alert('이미 슈퍼 관리자 권한이 활성화되어 있습니다.');
+            return;
+        }
+        const pwd = prompt('슈퍼 관리자 권한 획득을 위한 비밀번호를 입력하세요. (초기 비밀번호: 1008)');
+        if (pwd === '1008') {
+            window.isSuperAdmin = true;
+            alert('슈퍼 관리자 권한이 활성화되었습니다. 제출된 항목 옆에 삭제 버튼이 표시됩니다.');
+            if (document.getElementById('linksCard') && !document.getElementById('linksCard').classList.contains('hidden')) {
+                generateAdminLinks();
+            }
+        } else if (pwd !== null) {
+            alert('비밀번호가 일치하지 않습니다.');
+        }
     }
 });

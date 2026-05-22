@@ -44,6 +44,22 @@ window.firebaseDB = {
             throw e;
         }
     },
+
+    // 점검표 삭제 (슈퍼 관리자용)
+    deleteChecklist: async (month, day, dept, room) => {
+        try {
+            const docId = `${month}_${day}_${dept}_${room}`;
+            await runWithTimeout(
+                db.collection("checklists").doc(docId).delete(),
+                "데이터 삭제 시간 초과\n\n파이어베이스 서버와 통신할 수 없습니다."
+            );
+            console.log("Firebase 삭제 성공!");
+            return true;
+        } catch (e) {
+            console.error("Firebase 삭제 에러: ", e);
+            throw e;
+        }
+    },
     
     // 특정 날짜의 모든 제출 내역 불러오기 (관리자/부장님용)
     getChecklistsForDate: async (month, day) => {
