@@ -52,6 +52,27 @@ window.firebaseDB = {
         }
     },
 
+    // 특정 날짜의 모든 제출 내역 실시간 감시 (onSnapshot)
+    subscribeToChecklistsForDate: (month, day, callback) => {
+        try {
+            const dateStr = `${month}_${day}`;
+            return db.collection("checklists")
+                     .where("dateStr", "==", dateStr)
+                     .onSnapshot(snapshot => {
+                         const results = [];
+                         snapshot.forEach(doc => {
+                             results.push(doc.data());
+                         });
+                         callback(results);
+                     }, err => {
+                         console.error("Firebase 실시간 감시 에러: ", err);
+                     });
+        } catch (e) {
+            console.error("Firebase 실시간 감시 설정 에러: ", e);
+            throw e;
+        }
+    },
+
     // 1. 특정 실습실 개별 부장 결재 저장
     saveAdminApproval: async (month, day, dept, room, signature) => {
         try {

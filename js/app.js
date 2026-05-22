@@ -58,7 +58,15 @@ document.addEventListener('DOMContentLoaded', () => {
         statSubmittedRooms: document.getElementById('statSubmittedRooms'),
         statPendingRooms: document.getElementById('statPendingRooms'),
         statApprovedRooms: document.getElementById('statApprovedRooms'),
-        linksCardTitle: document.getElementById('linksCardTitle')
+        linksCardTitle: document.getElementById('linksCardTitle'),
+        deptheadApprovalCard: document.getElementById('deptheadApprovalCard'),
+        deptheadBulkSignaturePad: document.getElementById('deptheadBulkSignaturePad'),
+        deptheadBulkSavedOverlay: document.getElementById('deptheadBulkSavedOverlay'),
+        btnDeptheadClearBulkSig: document.getElementById('btnDeptheadClearBulkSig'),
+        btnDeptheadPreviewBulkSig: document.getElementById('btnDeptheadPreviewBulkSig'),
+        btnDeptheadSaveApproval: document.getElementById('btnDeptheadSaveApproval'),
+        btnDeptheadBulkPrint: document.getElementById('btnDeptheadBulkPrint'),
+        btnDeptheadDeleteBulkSig: document.getElementById('btnDeptheadDeleteBulkSig')
     };
 
     let currentChecklistState = {};
@@ -71,6 +79,9 @@ document.addEventListener('DOMContentLoaded', () => {
     let adminApprovalMode = 'bulk'; // 'bulk' 또는 'individual'
     let adminBulkSignatureDataUrl = null; // 일괄 결재 서명 이미지
     let currentApprovingLab = null; // 현재 개별 결재 팝업이 띄워진 실습실 정보 ({ dept, room })
+    
+    let checklistsUnsubscribe = null; // 실시간 Firestore 구독 해제 핸들
+    let deptheadBulkCanvasHelper = null; // 학과부장 일괄 서명 패드 헬퍼 객체
 
     // Step 1: Initialize Department Dropdown based on data.js
     function initDepartments() {
@@ -101,9 +112,10 @@ document.addEventListener('DOMContentLoaded', () => {
                 elements.monthSelect.value = m;
                 elements.dayInput.value = d;
                 
-                // 학과부장 접속 시 일괄 결재와 개별 결재 여부를 팝업으로 질문
-                const isBulk = confirm("모든 실습실에 동일한 서명을 일괄 적용하시겠습니까?\n\n[확인] 모든 실습실 일괄 서명 적용\n[취소] 실습실별 개별 서명 적용");
-                adminApprovalMode = isBulk ? 'bulk' : 'individual';
+                adminApprovalMode = 'bulk';
+                // 라디오 버튼 상태 강제 동기화
+                const radio = document.querySelector('input[name="deptheadApprovalMode"][value="bulk"]');
+                if (radio) radio.checked = true;
 
                 // 뒤로가기 버튼 노출 및 처음으로 이동 기능 적용
                 if (elements.btnBack) {
@@ -117,6 +129,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
                 // 점검 정보 입력 화면을 건너뜀
                 elements.stepInfo.classList.add('hidden');
+                updateDeptheadCardLayout();
                 generateAdminLinks();
             }
         } else if (m && d && dept && room) {
@@ -283,25 +296,72 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     // Generate Links for Admin
-    async function generateAdminLinks() {
+    function generateAdminLinks() {
         const m = elements.monthSelect.value;
         const d = elements.dayInput.value;
         const linksCard = document.getElementById('linksCard');
         const linksBody = document.getElementById('linksBody');
         
+        if (!m || !d) return;
+
         linksBody.innerHTML = '<tr><td colspan="5" style="padding:1rem; text-align:center;">데이터를 불러오는 중입니다...</td></tr>';
         linksCard.classList.remove('hidden');
 
-        let submittedData = [];
+        // 기존 실시간 리스너 구독 해제
+        if (checklistsUnsubscribe) {
+            checklistsUnsubscribe();
+            checklistsUnsubscribe = null;
+        }
+
         try {
             if (!window.firebaseDB) {
                 throw new Error("Firebase DB가 연결되지 않았습니다.");
             }
-            submittedData = await window.firebaseDB.getChecklistsForDate(m, d);
+            // 실시간 리스너 구독 등록 (onSnapshot)
+            checklistsUnsubscribe = window.firebaseDB.subscribeToChecklistsForDate(m, d, (submittedData) => {
+                window.currentSubmittedData = submittedData;
+                renderLinksTable(submittedData);
+            });
         } catch (e) {
-            console.error('Firebase 로드 실패', e);
-            alert('제출 현황을 불러오지 못했습니다: ' + (e.message || e));
+            console.error('Firebase 실시간 리스너 등록 실패', e);
+            linksBody.innerHTML = `<tr><td colspan="5" style="padding:1rem; text-align:center; color:red;">제출 현황을 불러오지 못했습니다: ${e.message || e}</td></tr>`;
         }
+    }
+
+    // 학과부장 저장됨 오버레이 상태 업데이트
+    function updateDeptheadSavedOverlayState() {
+        if (!elements.deptheadBulkSavedOverlay) return;
+        
+        if (adminBulkSignatureDataUrl) {
+            elements.deptheadBulkSavedOverlay.style.display = 'flex';
+        } else {
+            elements.deptheadBulkSavedOverlay.style.display = 'none';
+        }
+    }
+
+    // 학과부장 결재 설정 카드 내부 레이아웃 제어
+    function updateDeptheadCardLayout() {
+        if (!isDeptHeadMode || !elements.deptheadApprovalCard) return;
+
+        elements.deptheadApprovalCard.classList.remove('hidden');
+
+        if (adminApprovalMode === 'bulk') {
+            document.getElementById('deptheadBulkSignatureArea').style.display = 'flex';
+            elements.btnDeptheadSaveApproval.style.display = 'inline-flex';
+        } else {
+            document.getElementById('deptheadBulkSignatureArea').style.display = 'none';
+            elements.btnDeptheadSaveApproval.style.display = 'none';
+        }
+        
+        updateDeptheadSavedOverlayState();
+    }
+
+    // 현황판 테이블 렌더링 함수
+    function renderLinksTable(submittedData) {
+        const m = elements.monthSelect.value;
+        const d = elements.dayInput.value;
+        const linksBody = document.getElementById('linksBody');
+        const baseUrl = window.location.href.split('?')[0];
 
         // 일괄 서명 복구 판별
         const savedApproval = submittedData.find(item => item.adminSignature);
@@ -311,21 +371,40 @@ document.addEventListener('DOMContentLoaded', () => {
             adminBulkSignatureDataUrl = null;
         }
 
-        linksBody.innerHTML = '';
-        const baseUrl = window.location.href.split('?')[0];
+        // 동기화된 일괄 결재 상태 카드의 Overlay 업데이트
+        updateDeptheadSavedOverlayState();
 
-        // ── 실습실 데이터 리스트 및 정렬 ───────────────────────
-        let allRooms = [];
+        linksBody.innerHTML = '';
+
+        // ── 전체 행 리스트 생성 (학과부장 포함) ───────────────────────
+        let allRows = [];
         Object.keys(safetyData.departments).forEach(deptName => {
             const dept = safetyData.departments[deptName];
             dept.rooms.forEach(room => {
-                allRooms.push({ deptName, room });
+                allRows.push({
+                    type: 'room',
+                    teacher: room.teacher,
+                    deptName: deptName,
+                    roomName: room.name,
+                    room: room
+                });
             });
         });
-        
+
+        const deptNames = Object.keys(safetyData.departments);
+        const deptHeadName = deptNames.length > 0 ? safetyData.departments[deptNames[0]].head : "최지은";
+
+        // 학과부장 행 추가
+        allRows.push({
+            type: 'depthead',
+            teacher: deptHeadName,
+            deptName: '학과부장',
+            roomName: '학과부장'
+        });
+
         // 담당교사 이름순(가나다순) 정렬
-        allRooms.sort((a, b) => {
-            return a.room.teacher.localeCompare(b.room.teacher, 'ko');
+        allRows.sort((a, b) => {
+            return a.teacher.localeCompare(b.teacher, 'ko');
         });
 
         // ── 학과부장 대시보드 통계 업데이트 (학과부장 모드일 때만) ──────────────────
@@ -333,7 +412,8 @@ document.addEventListener('DOMContentLoaded', () => {
             elements.deptheadDashboard.classList.remove('hidden');
             elements.linksCardTitle.textContent = "📋 학과부장 결재 목록";
             
-            const totalCount = allRooms.length;
+            // 학과부장 본인을 제외한 실습실 개수
+            const totalCount = allRows.filter(r => r.type === 'room').length;
             const submittedCount = submittedData.length;
             const pendingCount = totalCount - submittedCount;
             
@@ -355,242 +435,119 @@ document.addEventListener('DOMContentLoaded', () => {
             elements.deptheadDashboard.classList.add('hidden');
             elements.linksCardTitle.textContent = "📊 제출 현황판 및 교사별 링크";
         }
-        
-        // ── 1. 학과부장 행 렌더링 ───────────────────────
-        const deptNames = Object.keys(safetyData.departments);
-        const deptHeadName = deptNames.length > 0 ? safetyData.departments[deptNames[0]].head : "최지은";
 
-        let approvalBadge = '';
-        if (adminApprovalMode === 'bulk') {
-            approvalBadge = adminBulkSignatureDataUrl 
-                ? '<span class="badge badge-success">✅ 일괄결재완료</span>' 
-                : '<span class="badge badge-warning">결재 대기</span>';
-        } else {
-            const isAllApproved = submittedData.length > 0 && submittedData.every(item => item.adminSignature);
-            approvalBadge = isAllApproved
-                ? '<span class="badge badge-success">✅ 결재 완료</span>'
-                : '<span class="badge badge-warning">결재 대기</span>';
-        }
-
-        const headRowTr = document.createElement('tr');
-        headRowTr.style.backgroundColor = '#f8fafc';
-        
-        const deptHeadUrl = `${baseUrl}?m=${m}&d=${d}&role=depthead`;
-
-        let deptHeadLinksCellHtml = '';
-        if (isDeptHeadMode) {
-            deptHeadLinksCellHtml = `
-                <div style="display:flex; gap:0.25rem; justify-content:center;">
-                    <button class="btn btn-primary" style="padding: 0.2rem 0.4rem;" onclick="navigator.clipboard.writeText('${deptHeadUrl}').then(() => {this.innerText='✅ 완료'; setTimeout(()=>this.innerText='📋 복사',1500)})">📋 복사</button>
-                    <button class="btn btn-outline" style="padding: 0.2rem 0.4rem;" onclick="window.openDeptHeadModePrompt()">🔗 열기</button>
-                </div>
-            `;
-        } else {
-            deptHeadLinksCellHtml = `
-                <div style="display:flex; gap:0.25rem; justify-content:center;">
-                    <button class="btn btn-primary" style="padding: 0.2rem 0.4rem;" onclick="navigator.clipboard.writeText('${deptHeadUrl}').then(() => {this.innerText='✅ 완료'; setTimeout(()=>this.innerText='📋 복사',1500)})">📋 복사</button>
-                    <a href="${deptHeadUrl}" target="_blank" class="btn btn-outline" style="padding: 0.2rem 0.4rem; text-decoration:none; display:inline-flex; align-items:center;">🔗 열기</a>
-                </div>
-            `;
-        }
-
-        // 새 순서: 담당교사, 링크 복사, 제출여부, 학과, 실습실
-        headRowTr.innerHTML = `
-            <td><strong>${deptHeadName}</strong></td>
-            <td>${deptHeadLinksCellHtml}</td>
-            <td style="text-align:center;">${approvalBadge}</td>
-            <td><strong>학과부장</strong></td>
-            <td><strong>학과부장</strong></td>
-        `;
-        linksBody.appendChild(headRowTr);
-
-        // ── 2. 학과부장 일괄 결재 서명 패드 행 렌더링 (일괄 모드일 때만 노출) ───────────────────────
-        if (isDeptHeadMode && adminApprovalMode === 'bulk') {
-            const bulkSigRowTr = document.createElement('tr');
-            bulkSigRowTr.id = 'adminBulkSignatureRow';
-            bulkSigRowTr.style.backgroundColor = '#f1f5f9';
-            bulkSigRowTr.innerHTML = `
-                <td colspan="5" style="padding: 0.75rem;">
-                    <div style="display:flex; align-items:center; justify-content:center; gap:2rem; flex-wrap:wrap;">
-                        <div style="display:flex; flex-direction:column; gap:0.4rem; align-items:center;">
-                            <span style="font-size:0.8rem; color:var(--text-muted); font-weight:600;">✍️ 학과부장 일괄 결재 서명</span>
-                            <div style="display:flex; gap:0.25rem;">
-                                <button class="btn btn-outline" id="btnClearAdminBulkSignature" type="button" style="padding:0.15rem 0.4rem; font-size:0.75rem;">지우기</button>
-                                <button class="btn btn-primary" id="btnSaveAdminBulkSignature" type="button" style="padding:0.15rem 0.4rem; font-size:0.75rem; background-color:var(--success-color); color:white;">💾 결재 저장</button>
-                                <button class="btn btn-secondary" id="btnDeleteAdminBulkSignature" type="button" style="padding:0.15rem 0.4rem; font-size:0.75rem; background-color:var(--danger-color); color:white; display:none;">❌ 결재 취소</button>
-                            </div>
-                        </div>
-                        <div style="position:relative; width:300px; height:120px;">
-                            <canvas id="adminBulkSignaturePad" width="300" height="120" style="background:white; border:1px solid #cbd5e1; border-radius:4px; touch-action:none; display:block;"></canvas>
-                            <div id="adminBulkSavedBadge" style="display:none; position:absolute; top:0; left:0; width:100%; height:100%; background:rgba(255,255,255,0.95); display:flex; align-items:center; justify-content:center; border-radius:4px; border:1px solid #cbd5e1;">
-                                <span class="badge badge-success" style="font-size:0.9rem; padding:0.4rem 0.8rem;">✅ 일괄 결재 서명 저장됨</span>
-                            </div>
-                        </div>
-                    </div>
-                </td>
-            `;
-            linksBody.appendChild(bulkSigRowTr);
-
-            // 동적 생성된 일괄 서명 패드 초기화 및 이벤트 연결
-            const bulkCanvas = document.getElementById('adminBulkSignaturePad');
-            const clearBtn = document.getElementById('btnClearAdminBulkSignature');
-            const saveBtn = document.getElementById('btnSaveAdminBulkSignature');
-            const deleteBtn = document.getElementById('btnDeleteAdminBulkSignature');
-            const savedBadge = document.getElementById('adminBulkSavedBadge');
-
-            if (bulkCanvas) {
-                initSignaturePad(bulkCanvas, clearBtn, () => {
-                    adminBulkSignatureDataUrl = null;
-                });
-            }
-
-            // 복구된 상태에 따른 서명패드 엘리먼트 가시성 동기화
-            if (adminBulkSignatureDataUrl) {
-                if (bulkCanvas) bulkCanvas.style.display = 'none';
-                if (clearBtn) clearBtn.style.display = 'none';
-                if (saveBtn) saveBtn.style.display = 'none';
-                if (deleteBtn) deleteBtn.style.display = 'inline-flex';
-                if (savedBadge) savedBadge.style.display = 'flex';
-            } else {
-                if (bulkCanvas) bulkCanvas.style.display = 'block';
-                if (clearBtn) clearBtn.style.display = 'inline-flex';
-                if (saveBtn) saveBtn.style.display = 'inline-flex';
-                if (deleteBtn) deleteBtn.style.display = 'none';
-                if (savedBadge) savedBadge.style.display = 'none';
-            }
-
-            // 버튼 이벤트 바인딩 다시 입히기
-            if (saveBtn) {
-                saveBtn.addEventListener('click', async () => {
-                    const m = elements.monthSelect.value;
-                    const d = elements.dayInput.value;
-                    if (!m || !d) {
-                        alert('점검 월과 일을 선택해 주세요.');
-                        return;
-                    }
-                    if (!window.currentSubmittedData || window.currentSubmittedData.length === 0) {
-                        alert('제출 완료된 실습실 점검표가 없습니다. 제출 후에 결재해 주세요.');
-                        return;
-                    }
-
-                    if (bulkCanvas) {
-                        const ctx = bulkCanvas.getContext('2d');
-                        const buffer = new Uint32Array(ctx.getImageData(0, 0, bulkCanvas.width, bulkCanvas.height).data.buffer);
-                        const hasSignature = buffer.some(color => color !== 0);
-                        
-                        if (!hasSignature) {
-                            alert('서명 패드에 서명을 그려주세요.');
-                            return;
-                        }
-                        adminBulkSignatureDataUrl = bulkCanvas.toDataURL("image/png");
-                    }
-
-                    try {
-                        if (!window.firebaseDB) {
-                            throw new Error("Firebase DB가 연결되지 않았습니다.");
-                        }
-                        await window.firebaseDB.saveAdminBulkApproval(m, d, window.currentSubmittedData, adminBulkSignatureDataUrl);
-                        alert('일괄 결재 서명이 저장되었습니다.');
-                        generateAdminLinks();
-                    } catch (err) {
-                        console.error("일괄 결재 저장 에러:", err);
-                        alert('일괄 결재 저장 중 에러가 발생했습니다: ' + (err.message || err));
-                    }
-                });
-            }
-
-            if (deleteBtn) {
-                deleteBtn.addEventListener('click', async () => {
-                    const m = elements.monthSelect.value;
-                    const d = elements.dayInput.value;
-                    if (!confirm('정말로 일괄 결재를 취소하시겠습니까?')) return;
-
-                    try {
-                        if (!window.firebaseDB) {
-                            throw new Error("Firebase DB가 연결되지 않았습니다.");
-                        }
-                        await window.firebaseDB.deleteAdminBulkApproval(m, d, window.currentSubmittedData);
-                        alert('일괄 결재가 취소되었습니다.');
-                        adminBulkSignatureDataUrl = null;
-                        generateAdminLinks();
-                    } catch (err) {
-                        console.error("일괄 결재 취소 에러:", err);
-                        alert('일괄 결재 취소 중 에러가 발생했습니다: ' + (err.message || err));
-                    }
-                });
-            }
-        }
-
-        // ── 3. 실습실 데이터 리스트 렌더링 ───────────────────────
-        allRooms.forEach(({ deptName, room }) => {
-            const params = new URLSearchParams({ m, d, dept: deptName, room: room.name });
-            const finalUrl = `${baseUrl}?${params.toString()}`;
-            
-            const matchedSubmission = submittedData.find(item => item.info && item.info.dept === deptName && item.info.room === room.name);
-            const isSubmitted = !!matchedSubmission;
-
-            // 제출여부 및 결재 버튼 통합 처리
-            let statusCellHtml = '';
-            if (!isSubmitted) {
-                statusCellHtml = '<span style="color:var(--danger-color);font-weight:bold;">❌ 미제출</span>';
-            } else {
-                if (isDeptHeadMode) {
-                    // 학과부장 전용 페이지: 결재 기능 제공
-                    if (adminApprovalMode === 'bulk') {
-                        const hasSig = matchedSubmission.adminSignature || adminBulkSignatureDataUrl;
-                        statusCellHtml = hasSig 
-                            ? '<span class="badge badge-success">✅ 일괄결재됨</span>' 
-                            : '<div style="display:flex;flex-direction:column;align-items:center;gap:0.15rem;"><span style="color:var(--success-color);font-weight:bold;">✅ 제출됨</span><span class="badge badge-warning" style="font-size:0.7rem;padding:0.1rem 0.3rem;">결재 대기</span></div>';
-                    } else {
-                        // 개별결재 모드
-                        const hasSig = matchedSubmission.adminSignature;
-                        if (hasSig) {
-                            statusCellHtml = `
-                                <div style="display:flex; flex-direction:column; align-items:center; gap:0.2rem;">
-                                    <img src="${hasSig}" style="height:24px; border:1px solid #cbd5e1; border-radius:4px; background:white; padding:1px;" />
-                                    <button class="btn btn-outline" type="button" style="padding: 0.1rem 0.3rem !important; font-size: 0.7rem !important; border-color: var(--danger-color); color: var(--danger-color);" onclick="window.deleteIndividualApproval('${deptName}', '${room.name}')">결재취소</button>
-                                </div>
-                            `;
-                        } else {
-                            statusCellHtml = `
-                                <div style="display:flex; flex-direction:column; align-items:center; gap:0.2rem;">
-                                    <span style="color:var(--success-color);font-weight:bold; font-size:0.75rem;">✅ 제출됨</span>
-                                    <button class="btn btn-primary" type="button" style="padding: 0.15rem 0.35rem !important; font-size: 0.75rem !important;" onclick="window.openIndividualApprovalModal('${deptName}', '${room.name}')">✍️ 결재하기</button>
-                                </div>
-                            `;
-                        }
-                    }
+        // ── 각 행 렌더링 ───────────────────────
+        allRows.forEach((row) => {
+            if (row.type === 'depthead') {
+                // 학과부장 행 렌더링
+                let approvalBadge = '';
+                if (adminApprovalMode === 'bulk') {
+                    approvalBadge = adminBulkSignatureDataUrl 
+                        ? '<span class="badge badge-success">✅ 일괄결재완료</span>' 
+                        : '<span class="badge badge-warning">결재 대기</span>';
                 } else {
-                    // 일반 관리자 페이지: 결재 버튼 없이 완료 상태만 노출
-                    if (adminApprovalMode === 'bulk') {
-                        const hasSig = matchedSubmission.adminSignature || adminBulkSignatureDataUrl;
-                        statusCellHtml = hasSig 
-                            ? '<span class="badge badge-success">✅ 일괄결재됨</span>' 
-                            : '<span style="color:var(--success-color);font-weight:bold;">✅ 제출됨</span>';
+                    const isAllApproved = submittedData.length > 0 && submittedData.every(item => item.adminSignature);
+                    approvalBadge = isAllApproved
+                        ? '<span class="badge badge-success">✅ 결재 완료</span>'
+                        : '<span class="badge badge-warning">결재 대기</span>';
+                }
+
+                const headRowTr = document.createElement('tr');
+                headRowTr.style.backgroundColor = '#f8fafc';
+                
+                const deptHeadUrl = `${baseUrl}?m=${m}&d=${d}&role=depthead`;
+
+                // 링크 복사 셀에서 이모지(📋, 🔗) 제거 및 패딩/폰트 크기 줄임
+                const deptHeadLinksCellHtml = `
+                    <div style="display:flex; gap:0.2rem; justify-content:center;">
+                        <button class="btn btn-primary" style="padding: 0.2rem 0.35rem !important; font-size: 0.75rem !important;" onclick="navigator.clipboard.writeText('${deptHeadUrl}').then(() => {this.innerText='완료'; setTimeout(()=>this.innerText='복사',1500)})">복사</button>
+                        <a href="${deptHeadUrl}" target="_blank" class="btn btn-outline" style="padding: 0.2rem 0.35rem !important; font-size: 0.75rem !important; text-decoration:none; display:inline-flex; align-items:center; justify-content:center;">열기</a>
+                    </div>
+                `;
+
+                headRowTr.innerHTML = `
+                    <td><strong>${deptHeadName}</strong></td>
+                    <td>${deptHeadLinksCellHtml}</td>
+                    <td style="text-align:center;">${approvalBadge}</td>
+                    <td><strong>학과부장</strong></td>
+                    <td><strong>학과부장</strong></td>
+                `;
+                linksBody.appendChild(headRowTr);
+            } else {
+                // 실습실 행 렌더링
+                const deptName = row.deptName;
+                const room = row.room;
+                const params = new URLSearchParams({ m, d, dept: deptName, room: room.name });
+                const finalUrl = `${baseUrl}?${params.toString()}`;
+                
+                const matchedSubmission = submittedData.find(item => item.info && item.info.dept === deptName && item.info.room === room.name);
+                const isSubmitted = !!matchedSubmission;
+
+                // 제출여부 및 결재 버튼 통합 처리
+                let statusCellHtml = '';
+                if (!isSubmitted) {
+                    statusCellHtml = '<span style="color:var(--danger-color);font-weight:bold;">❌ 미제출</span>';
+                } else {
+                    if (isDeptHeadMode) {
+                        // 학과부장 전용 페이지: 결재 기능 제공
+                        if (adminApprovalMode === 'bulk') {
+                            const hasSig = matchedSubmission.adminSignature || adminBulkSignatureDataUrl;
+                            statusCellHtml = hasSig 
+                                ? '<span class="badge badge-success">✅ 일괄결재됨</span>' 
+                                : '<div style="display:flex;flex-direction:column;align-items:center;gap:0.15rem;"><span style="color:var(--success-color);font-weight:bold;">✅ 제출됨</span><span class="badge badge-warning" style="font-size:0.7rem;padding:0.1rem 0.3rem;">결재 대기</span></div>';
+                        } else {
+                            // 개별결재 모드
+                            const hasSig = matchedSubmission.adminSignature;
+                            if (hasSig) {
+                                statusCellHtml = `
+                                    <div style="display:flex; flex-direction:column; align-items:center; gap:0.2rem;">
+                                        <img src="${hasSig}" style="height:24px; border:1px solid #cbd5e1; border-radius:4px; background:white; padding:1px;" />
+                                        <button class="btn btn-outline" type="button" style="padding: 0.1rem 0.3rem !important; font-size: 0.7rem !important; border-color: var(--danger-color); color: var(--danger-color);" onclick="window.deleteIndividualApproval('${deptName}', '${room.name}')">결재취소</button>
+                                    </div>
+                                `;
+                            } else {
+                                statusCellHtml = `
+                                    <div style="display:flex; flex-direction:column; align-items:center; gap:0.2rem;">
+                                        <span style="color:var(--success-color);font-weight:bold; font-size:0.75rem;">✅ 제출됨</span>
+                                        <button class="btn btn-primary" type="button" style="padding: 0.15rem 0.35rem !important; font-size: 0.75rem !important;" onclick="window.openIndividualApprovalModal('${deptName}', '${room.name}')">✍️ 결재하기</button>
+                                    </div>
+                                `;
+                            }
+                        }
                     } else {
-                        const hasSig = matchedSubmission.adminSignature;
-                        statusCellHtml = hasSig 
-                            ? '<span class="badge badge-success">✅ 결재 완료</span>' 
-                            : '<span style="color:var(--success-color);font-weight:bold;">✅ 제출됨</span>';
+                        // 일반 관리자 페이지: 결재 버튼 없이 완료 상태만 노출
+                        if (adminApprovalMode === 'bulk') {
+                            const hasSig = matchedSubmission.adminSignature || adminBulkSignatureDataUrl;
+                            statusCellHtml = hasSig 
+                                ? '<span class="badge badge-success">✅ 일괄결재됨</span>' 
+                                : '<span style="color:var(--success-color);font-weight:bold;">✅ 제출됨</span>';
+                        } else {
+                            const hasSig = matchedSubmission.adminSignature;
+                            statusCellHtml = hasSig 
+                                ? '<span class="badge badge-success">✅ 결재 완료</span>' 
+                                : '<span style="color:var(--success-color);font-weight:bold;">✅ 제출됨</span>';
+                        }
                     }
                 }
-            }
 
-            const tr = document.createElement('tr');
-            // 새 순서: 담당교사, 링크 복사, 제출여부, 학과, 실습실
-            tr.innerHTML = `
-                <td>${room.teacher}</td>
-                <td>
-                    <div style="display:flex; gap:0.25rem; justify-content:center;">
-                        <button class="btn btn-primary" style="padding: 0.2rem 0.4rem;" onclick="navigator.clipboard.writeText('${finalUrl}').then(() => {this.innerText='✅ 완료'; setTimeout(()=>this.innerText='📋 복사',1500)})">📋 복사</button>
-                        <a href="${finalUrl}" target="_blank" class="btn btn-outline" style="padding: 0.2rem 0.4rem; text-decoration:none; display:inline-flex; align-items:center;">🔗 열기</a>
+                // 링크 복사 셀에서 이모지(📋, 🔗) 제거 및 패딩/폰트 크기 줄임
+                const linksCellHtml = `
+                    <div style="display:flex; gap:0.2rem; justify-content:center;">
+                        <button class="btn btn-primary" style="padding: 0.2rem 0.35rem !important; font-size: 0.75rem !important;" onclick="navigator.clipboard.writeText('${finalUrl}').then(() => {this.innerText='완료'; setTimeout(()=>this.innerText='복사',1500)})">복사</button>
+                        <a href="${finalUrl}" target="_blank" class="btn btn-outline" style="padding: 0.2rem 0.35rem !important; font-size: 0.75rem !important; text-decoration:none; display:inline-flex; align-items:center; justify-content:center;">열기</a>
                     </div>
-                </td>
-                <td style="text-align:center; vertical-align:middle;">${statusCellHtml}</td>
-                <td>${deptName}</td>
-                <td><strong>${room.name}</strong></td>
-            `;
-            linksBody.appendChild(tr);
+                `;
+
+                const tr = document.createElement('tr');
+                tr.innerHTML = `
+                    <td>${row.teacher}</td>
+                    <td>${linksCellHtml}</td>
+                    <td style="text-align:center; vertical-align:middle;">${statusCellHtml}</td>
+                    <td>${deptName}</td>
+                    <td><strong>${room.name}</strong></td>
+                `;
+                linksBody.appendChild(tr);
+            }
         });
 
         window.currentSubmittedData = submittedData;
@@ -806,6 +763,137 @@ document.addEventListener('DOMContentLoaded', () => {
     const adminIndivCanvas = document.getElementById('adminIndivSignaturePad');
     if (adminIndivCanvas) {
         initSignaturePad(adminIndivCanvas, elements.btnClearAdminIndivSignature);
+    }
+
+    // 학과부장 일괄 결재 서명 패드 초기화
+    if (elements.deptheadBulkSignaturePad) {
+        deptheadBulkCanvasHelper = initSignaturePad(elements.deptheadBulkSignaturePad, elements.btnDeptheadClearBulkSig, () => {
+            adminBulkSignatureDataUrl = null;
+            updateDeptheadSavedOverlayState();
+        });
+    }
+
+    // 학과부장 결재 모드 (라디오 버튼) 변경 바인딩
+    const approvalModeRadios = document.querySelectorAll('input[name="deptheadApprovalMode"]');
+    approvalModeRadios.forEach(radio => {
+        radio.addEventListener('change', (e) => {
+            adminApprovalMode = e.target.value;
+            updateDeptheadCardLayout();
+            if (window.currentSubmittedData) {
+                renderLinksTable(window.currentSubmittedData);
+            }
+        });
+    });
+
+    // 학과부장 결재 저장하기
+    if (elements.btnDeptheadSaveApproval) {
+        elements.btnDeptheadSaveApproval.addEventListener('click', async () => {
+            const m = elements.monthSelect.value;
+            const d = elements.dayInput.value;
+            if (!m || !d) {
+                alert('점검 월과 일을 먼저 선택해주세요.');
+                return;
+            }
+
+            const isEmpty = checkSignatureEmpty(elements.deptheadBulkSignaturePad);
+            if (isEmpty) {
+                alert('서명 패드에 서명을 그려주세요.');
+                return;
+            }
+
+            const signature = elements.deptheadBulkSignaturePad.toDataURL("image/png");
+            const submissions = window.currentSubmittedData || [];
+            
+            if (submissions.length === 0) {
+                alert('제출된 실습실 점검표가 없어 일괄 결재를 적용할 수 없습니다.');
+                return;
+            }
+
+            try {
+                if (!window.firebaseDB) {
+                    throw new Error("Firebase DB가 연결되지 않았습니다.");
+                }
+                await window.firebaseDB.saveAdminBulkApproval(m, d, submissions, signature);
+                adminBulkSignatureDataUrl = signature;
+                alert('모든 제출된 실습실에 일괄 결재가 적용되었습니다.');
+                updateDeptheadSavedOverlayState();
+                generateAdminLinks();
+            } catch (err) {
+                console.error("일괄 결재 저장 에러:", err);
+                alert('일괄 결재 저장 중 에러가 발생했습니다: ' + (err.message || err));
+            }
+        });
+    }
+
+    // 학과부장 일괄 결재 취소
+    if (elements.btnDeptheadDeleteBulkSig) {
+        elements.btnDeptheadDeleteBulkSig.addEventListener('click', async () => {
+            if (!confirm('저장된 일괄 결재 서명을 취소하시겠습니까?')) return;
+            const m = elements.monthSelect.value;
+            const d = elements.dayInput.value;
+            if (!m || !d) return;
+
+            const submissions = window.currentSubmittedData || [];
+            try {
+                if (!window.firebaseDB) {
+                    throw new Error("Firebase DB가 연결되지 않았습니다.");
+                }
+                await window.firebaseDB.deleteAdminBulkApproval(m, d, submissions);
+                adminBulkSignatureDataUrl = null;
+                if (deptheadBulkCanvasHelper) {
+                    deptheadBulkCanvasHelper.clear();
+                }
+                alert('일괄 결재 서명이 취소되었습니다.');
+                updateDeptheadSavedOverlayState();
+                generateAdminLinks();
+            } catch (err) {
+                console.error("일괄 결재 취소 에러:", err);
+                alert('일괄 결재 취소 중 에러가 발생했습니다: ' + (err.message || err));
+            }
+        });
+    }
+
+    // 학과부장 일괄 결재 미리보기
+    if (elements.btnDeptheadPreviewBulkSig) {
+        elements.btnDeptheadPreviewBulkSig.addEventListener('click', async () => {
+            const submissions = window.currentSubmittedData || [];
+            if (submissions.length === 0) {
+                alert('미리보기할 제출된 안전점검표가 없습니다.');
+                return;
+            }
+
+            const isEmpty = checkSignatureEmpty(elements.deptheadBulkSignaturePad);
+            if (isEmpty && !adminBulkSignatureDataUrl) {
+                alert('서명 패드에 서명을 그린 후 미리보기를 진행해주세요.');
+                return;
+            }
+
+            const tempSig = adminBulkSignatureDataUrl || elements.deptheadBulkSignaturePad.toDataURL("image/png");
+
+            elements.previewModalBody.innerHTML = '<p style="text-align:center;padding:30px;font-size:1rem;">🔄 미리보기 생성 중...</p>';
+            elements.previewModal.classList.remove('hidden');
+
+            try {
+                const firstSub = { ...submissions[0] };
+                const originalAdminSig = firstSub.adminSignature;
+                firstSub.adminSignature = tempSig;
+
+                await renderPrintLayout(firstSub, false, elements.previewModalBody);
+                firstSub.adminSignature = originalAdminSig;
+            } catch (err) {
+                console.error("일괄 결재 미리보기 렌더링 실패:", err);
+                elements.previewModalBody.innerHTML = '<p style="text-align:center;padding:30px;color:red;">미리보기를 불러오지 못했습니다.</p>';
+            }
+        });
+    }
+
+    // 학과부장 일괄 인쇄 버튼
+    if (elements.btnDeptheadBulkPrint) {
+        elements.btnDeptheadBulkPrint.addEventListener('click', () => {
+            if (elements.btnBulkPrint) {
+                elements.btnBulkPrint.click();
+            }
+        });
     }
 
     // Update Progress
