@@ -823,6 +823,7 @@ document.addEventListener('DOMContentLoaded', () => {
         
         let drawing = false;
         let isCanvasSigned = false; // 서명 여부 추적용 불리언 플래그
+        const penWidth = 3 + Math.random() * 2; // 3~5 사이 랜덤 굵기 (페이지 로드 시 고정)
         
         function getPointerPos(e) {
             const rect = canvasEl.getBoundingClientRect();
@@ -849,13 +850,10 @@ document.addEventListener('DOMContentLoaded', () => {
             const pos = getPointerPos(e);
             ctx.lineTo(pos.x, pos.y);
             ctx.strokeStyle = '#0f172a';
-            ctx.lineWidth = 2 + Math.random() * 2; // 현재 두께(2)부터 2배(4)까지 랜덤
+            ctx.lineWidth = penWidth; // 페이지 로드 시 결정된 고정 굵기
             ctx.lineCap = 'round';
             ctx.lineJoin = 'round';
             ctx.stroke();
-            
-            ctx.beginPath();
-            ctx.moveTo(pos.x, pos.y);
         }
         
         function stopDrawing() {
