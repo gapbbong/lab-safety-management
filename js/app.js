@@ -97,6 +97,9 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     initDepartments();
+    if (elements.deptheadApprovalCard) {
+        elements.deptheadApprovalCard.classList.add('hidden');
+    }
 
     // Deep linking logic
     function processUrlParams() {
@@ -129,8 +132,11 @@ document.addEventListener('DOMContentLoaded', () => {
                     };
                 }
 
-                // 점검 정보 입력 화면을 건너뜀
-                elements.stepInfo.classList.add('hidden');
+                // 점검 정보 입력 화면의 카드만 숨기고, 부모인 stepInfo는 보여주도록 수정
+                const cardInfo = document.querySelector('.card-info');
+                if (cardInfo) cardInfo.classList.add('hidden');
+                elements.stepInfo.classList.remove('hidden');
+                
                 updateDeptheadCardLayout();
                 generateAdminLinks();
             }
@@ -308,6 +314,20 @@ document.addEventListener('DOMContentLoaded', () => {
 
         linksBody.innerHTML = '<tr><td colspan="5" style="padding:1rem; text-align:center;">데이터를 불러오는 중입니다...</td></tr>';
         linksCard.classList.remove('hidden');
+
+        if (isDeptHeadMode) {
+            const cardInfo = document.querySelector('.card-info');
+            if (cardInfo) cardInfo.classList.add('hidden');
+            if (elements.btnBack) {
+                elements.btnBack.classList.remove('hidden');
+                elements.btnBack.title = '처음으로';
+                elements.btnBack.onclick = (e) => {
+                    e.preventDefault();
+                    window.location.href = window.location.pathname;
+                };
+            }
+            updateDeptheadCardLayout();
+        }
 
         // 기존 실시간 리스너 구독 해제
         if (checklistsUnsubscribe) {
