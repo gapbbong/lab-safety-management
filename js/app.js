@@ -106,9 +106,23 @@ document.addEventListener('DOMContentLoaded', () => {
         const params = new URLSearchParams(window.location.search);
         const m = params.get('m');
         const d = params.get('d');
-        const dept = params.get('dept');
-        const room = params.get('room');
+        let dept = params.get('dept');
+        let room = params.get('room');
+        const di = params.get('di');
+        const ri = params.get('ri');
         const role = params.get('role');
+
+        // URL 길이 단축을 위한 인덱스 파라미터 지원
+        if (di !== null && ri !== null) {
+            const deptKeys = Object.keys(safetyData.departments);
+            if (deptKeys[di]) {
+                dept = deptKeys[di];
+                const rooms = safetyData.departments[dept].rooms;
+                if (rooms[ri]) {
+                    room = rooms[ri].name;
+                }
+            }
+        }
 
         if (role === 'depthead') {
             isDeptHeadMode = true;
@@ -400,15 +414,17 @@ document.addEventListener('DOMContentLoaded', () => {
 
         // ── 전체 행 리스트 생성 (학과부장 포함) ───────────────────────
         let allRows = [];
-        Object.keys(safetyData.departments).forEach(deptName => {
+        Object.keys(safetyData.departments).forEach((deptName, dIdx) => {
             const dept = safetyData.departments[deptName];
-            dept.rooms.forEach(room => {
+            dept.rooms.forEach((room, rIdx) => {
                 allRows.push({
                     type: 'room',
                     teacher: room.teacher,
                     deptName: deptName,
                     roomName: room.name,
-                    room: room
+                    room: room,
+                    di: dIdx,
+                    ri: rIdx
                 });
             });
         });
@@ -499,7 +515,8 @@ document.addEventListener('DOMContentLoaded', () => {
                 // 실습실 행 렌더링
                 const deptName = row.deptName;
                 const room = row.room;
-                const params = new URLSearchParams({ m, d, dept: deptName, room: room.name });
+                // 긴 한글 이름 대신 인덱스(di, ri)를 사용하여 URL 단축
+                const params = new URLSearchParams({ m, d, di: row.di, ri: row.ri });
                 const finalUrl = `${baseUrl}?${params.toString()}`;
                 
                 const matchedSubmission = submittedData.find(item => item.info && item.info.dept === deptName && item.info.room === room.name);
@@ -589,12 +606,14 @@ document.addEventListener('DOMContentLoaded', () => {
             let textToCopy = `📋 ${m}월 ${d}일 실습실 안전점검표 제출 링크\n\n`;
             
             let allRooms = [];
-            Object.keys(safetyData.departments).forEach(deptName => {
-                safetyData.departments[deptName].rooms.forEach(room => {
+            Object.keys(safetyData.departments).forEach((deptName, dIdx) => {
+                safetyData.departments[deptName].rooms.forEach((room, rIdx) => {
                     allRooms.push({
                         deptName: deptName,
                         roomName: room.name,
-                        teacher: room.teacher
+                        teacher: room.teacher,
+                        di: dIdx,
+                        ri: rIdx
                     });
                 });
             });
@@ -602,7 +621,8 @@ document.addEventListener('DOMContentLoaded', () => {
             allRooms.sort((a, b) => a.teacher.localeCompare(b.teacher, 'ko'));
             
             allRooms.forEach(room => {
-                const params = new URLSearchParams({ m, d, dept: room.deptName, room: room.roomName });
+                // 긴 한글 이름 대신 인덱스(di, ri)를 사용하여 URL 단축
+                const params = new URLSearchParams({ m, d, di: room.di, ri: room.ri });
                 const link = `${baseUrl}?${params.toString()}`;
                 textToCopy += `[${room.deptName}] ${room.roomName} - ${room.teacher} 선생님\n${link}\n\n`;
             });
