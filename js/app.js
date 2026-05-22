@@ -81,6 +81,8 @@ document.addEventListener('DOMContentLoaded', () => {
     let currentApprovingLab = null; // 현재 개별 결재 팝업이 띄워진 실습실 정보 ({ dept, room })
     
     let checklistsUnsubscribe = null; // 실시간 Firestore 구독 해제 핸들
+    let canvasHelper = null; // 교사 서명 패드 헬퍼 객체
+    let adminIndivCanvasHelper = null; // 개별 결재 서명 패드 헬퍼 객체
     let deptheadBulkCanvasHelper = null; // 학과부장 일괄 서명 패드 헬퍼 객체
 
     // Step 1: Initialize Department Dropdown based on data.js
@@ -534,7 +536,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 const linksCellHtml = `
                     <div style="display:flex; gap:0.2rem; justify-content:center;">
                         <button class="btn btn-primary" style="padding: 0.2rem 0.35rem !important; font-size: 0.75rem !important;" onclick="navigator.clipboard.writeText('${finalUrl}').then(() => {this.innerText='완료'; setTimeout(()=>this.innerText='복사',1500)})">복사</button>
-                        <a href="${finalUrl}" target="_blank" class="btn btn-outline" style="padding: 0.2rem 0.35rem !important; font-size: 0.75rem !important; text-decoration:none; display:inline-flex; align-items:center; justify-content:center;">열기</a>
+                        <button class="btn btn-outline" style="padding: 0.2rem 0.35rem !important; font-size: 0.75rem !important; display:inline-flex; align-items:center; justify-content:center;" onclick="window.loadChecklistInline('${deptName}', '${room.name}')">열기</button>
                     </div>
                 `;
 
@@ -649,6 +651,137 @@ document.addEventListener('DOMContentLoaded', () => {
         };
     }
 
+    // 기존 데이터 복원 함수
+    function fillChecklistForm(data) {
+        if (!data || !data.results) return;
+        
+        // 결과 복원
+        data.results.forEach((category, catIdx) => {
+            category.items.forEach((item, itemIdx) => {
+                const itemId = `item_${catIdx}_${itemIdx}`;
+                const savedItem = category.items[itemIdx];
+                if (savedItem && savedItem.status) {
+                    currentChecklistState[itemId] = {
+                        status: savedItem.status,
+                        notes: savedItem.notes || ''
+                    };
+                    
+                    // 라디오 버튼 상태 반영
+                    const radio = document.querySelector(`input[name="${itemId}"][value="${savedItem.status}"]`);
+                    if (radio) radio.checked = true;
+                    
+                    // 조치사항 입력 폼 활성화 및 텍스트 반영
+                    const noteInput = document.querySelector(`.notes-input[data-id="${itemId}"]`);
+                    if (noteInput) {
+                        if (savedItem.status === '불량') {
+                            noteInput.disabled = false;
+                            noteInput.value = savedItem.notes || '';
+                        } else {
+                            noteInput.disabled = true;
+                            noteInput.value = '';
+                        }
+                    }
+                }
+            });
+        });
+        
+        // 서명 이미지 복구
+        if (data.signature) {
+            signatureDataUrl = data.signature;
+            const sigCanvas = document.getElementById('signaturePad');
+            if (sigCanvas) {
+                const ctx = sigCanvas.getContext('2d');
+                ctx.clearRect(0, 0, sigCanvas.width, sigCanvas.height);
+                const img = new Image();
+                img.onload = () => {
+                    ctx.drawImage(img, 0, 0);
+                    if (canvasHelper) {
+                        canvasHelper.setSigned(true);
+                    }
+                    updateSaveButtonState();
+                };
+                img.src = data.signature;
+            }
+        } else {
+            signatureDataUrl = null;
+            if (canvasHelper) {
+                canvasHelper.clear();
+            }
+        }
+        
+        updateProgress();
+    }
+
+    // 대시보드 인라인 뷰어 로드 함수
+    window.loadChecklistInline = function(dept, room) {
+        const m = elements.monthSelect.value;
+        const d = elements.dayInput.value;
+        if (!m || !d) {
+            alert('점검 월과 일을 먼저 선택해주세요.');
+            return;
+        }
+
+        const deptData = safetyData.departments[dept];
+        if (!deptData) return;
+        const roomData = deptData.rooms.find(r => r.name === room);
+        const teacherName = roomData ? roomData.teacher : "";
+
+        const isConfirmed = confirm(`${teacherName} 선생님, ${room} 담당자가 맞습니까?`);
+        if (!isConfirmed) return;
+
+        currentInfo = {
+            month: m,
+            day: d,
+            dept: dept,
+            room: room,
+            head: deptData.head,
+            teacher: teacherName,
+            date: `2026-${m.padStart(2, '0')}-${d.padStart(2, '0')}`
+        };
+
+        elements.checkInfo.textContent = `${currentInfo.dept} / ${currentInfo.room} / 담당: ${currentInfo.teacher}`;
+        
+        // 체크리스트 폼 초기화 및 렌더링
+        renderChecklist();
+        
+        // 기존 제출 정보 존재 여부 확인 후 복원 또는 새 데이터 기준 갱신
+        const matchedSubmission = window.currentSubmittedData && window.currentSubmittedData.find(item => item.info && item.info.dept === dept && item.info.room === room);
+        if (matchedSubmission) {
+            fillChecklistForm(matchedSubmission);
+        } else {
+            updateProgress();
+        }
+
+        // 체크리스트 양식 활성화
+        elements.stepChecklist.classList.remove('hidden');
+        
+        // 인라인 대시보드 모드인 경우 하단으로 부드럽게 스크롤
+        if (isAdminMode) {
+            if (elements.btnBack) {
+                elements.btnBack.classList.remove('hidden');
+                elements.btnBack.title = '처음으로';
+                elements.btnBack.onclick = (e) => {
+                    e.preventDefault();
+                    elements.stepChecklist.classList.add('hidden');
+                    window.scrollTo({ top: 0, behavior: 'smooth' });
+                };
+            }
+            setTimeout(() => {
+                elements.stepChecklist.scrollIntoView({ behavior: 'smooth', block: 'start' });
+            }, 100);
+        } else {
+            elements.stepInfo.classList.add('hidden');
+            if (elements.btnBack) {
+                elements.btnBack.classList.remove('hidden');
+                elements.btnBack.title = '처음으로';
+                elements.btnBack.onclick = (e) => {
+                    e.preventDefault();
+                    window.location.href = window.location.pathname;
+                };
+            }
+        }
+    };
+
     // ── 서명 드로잉 패드 초기화 헬퍼 함수 ────────────────
     function initSignaturePad(canvasEl, clearBtnEl, onClear = null) {
         if (!canvasEl) return null;
@@ -656,6 +789,7 @@ document.addEventListener('DOMContentLoaded', () => {
         ctx.clearRect(0, 0, canvasEl.width, canvasEl.height);
         
         let drawing = false;
+        let isCanvasSigned = false; // 서명 여부 추적용 불리언 플래그
         
         function getPointerPos(e) {
             const rect = canvasEl.getBoundingClientRect();
@@ -670,6 +804,7 @@ document.addEventListener('DOMContentLoaded', () => {
         function startDrawing(e) {
             e.preventDefault();
             drawing = true;
+            isCanvasSigned = true; // 드로잉이 시작되면 서명이 있는 것으로 설정
             const pos = getPointerPos(e);
             ctx.beginPath();
             ctx.moveTo(pos.x, pos.y);
@@ -703,6 +838,7 @@ document.addEventListener('DOMContentLoaded', () => {
         if (clearBtnEl) {
             clearBtnEl.addEventListener('click', () => {
                 ctx.clearRect(0, 0, canvasEl.width, canvasEl.height);
+                isCanvasSigned = false;
                 if (onClear) onClear();
             });
         }
@@ -710,13 +846,29 @@ document.addEventListener('DOMContentLoaded', () => {
         return {
             canvas: canvasEl,
             ctx: ctx,
-            clear: () => ctx.clearRect(0, 0, canvasEl.width, canvasEl.height)
+            clear: () => {
+                ctx.clearRect(0, 0, canvasEl.width, canvasEl.height);
+                isCanvasSigned = false;
+            },
+            isSigned: () => isCanvasSigned,
+            setSigned: (val) => { isCanvasSigned = val; }
         };
     }
 
     // 캔버스 비어있는지 확인하는 헬퍼 함수
     function checkSignatureEmpty(canvasEl) {
         if (!canvasEl) return true;
+        // 헬퍼 플래그가 있으면 플래그를 기반으로 판별
+        if (canvasEl === canvas && canvasHelper) {
+            return !canvasHelper.isSigned();
+        }
+        if (canvasEl === elements.deptheadBulkSignaturePad && deptheadBulkCanvasHelper) {
+            return !deptheadBulkCanvasHelper.isSigned();
+        }
+        if (canvasEl === adminIndivCanvas && adminIndivCanvasHelper) {
+            return !adminIndivCanvasHelper.isSigned();
+        }
+        // 폴백: 픽셀 스캐닝
         const ctx = canvasEl.getContext('2d');
         const buffer = new Uint32Array(ctx.getImageData(0, 0, canvasEl.width, canvasEl.height).data.buffer);
         return !buffer.some(color => color !== 0);
@@ -747,7 +899,7 @@ document.addEventListener('DOMContentLoaded', () => {
     // 각 서명 패드 초기화
     const canvas = document.getElementById('signaturePad');
     if (canvas) {
-        initSignaturePad(canvas, document.getElementById('btnClearSignature'), () => {
+        canvasHelper = initSignaturePad(canvas, document.getElementById('btnClearSignature'), () => {
             signatureDataUrl = null;
             updateSaveButtonState();
         });
@@ -762,7 +914,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     const adminIndivCanvas = document.getElementById('adminIndivSignaturePad');
     if (adminIndivCanvas) {
-        initSignaturePad(adminIndivCanvas, elements.btnClearAdminIndivSignature);
+        adminIndivCanvasHelper = initSignaturePad(adminIndivCanvas, elements.btnClearAdminIndivSignature);
     }
 
     // 학과부장 일괄 결재 서명 패드 초기화
@@ -944,6 +1096,10 @@ document.addEventListener('DOMContentLoaded', () => {
             }
         }
 
+        const originalBtnText = elements.btnSave.innerHTML;
+        elements.btnSave.disabled = true;
+        elements.btnSave.innerHTML = '⏳ 저장 중...';
+
         if (canvas) {
             signatureDataUrl = canvas.toDataURL("image/png");
         }
@@ -958,22 +1114,37 @@ document.addEventListener('DOMContentLoaded', () => {
                 throw new Error("Firebase DB가 연결되지 않았습니다. 인터넷이나 방화벽 상태를 확인해주세요.");
             }
             await window.firebaseDB.saveChecklist(finalData);
-            alert(`${currentInfo.room} 안전점검표가 Firebase DB에 성공적으로 저장되었습니다.`);
+            elements.btnSave.innerHTML = '✅ 저장됨';
+            
+            // 현황판에 바로 반영하기 위해 현황 갱신 (onSnapshot이 켜져 있으므로 데이터 갱신 시 자동 반영됨)
+            if (isAdminMode) {
+                // 1.5초 후 폼 접고 대시보드로 돌아가기
+                setTimeout(() => {
+                    elements.stepChecklist.classList.add('hidden');
+                    elements.btnSave.innerHTML = '💾 저장하기';
+                    updateSaveButtonState();
+                    
+                    // 원래 현황판 위치로 부드럽게 스크롤 복귀
+                    const linksCard = document.getElementById('linksCard');
+                    if (linksCard) {
+                        linksCard.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                    }
+                }, 1500);
+            } else {
+                elements.doneDesc.textContent = `${currentInfo.dept} ${currentInfo.room} 안전점검표가 Firebase DB에 성공적으로 저장되었습니다.`;
+                setTimeout(() => {
+                    elements.stepChecklist.classList.add('hidden');
+                    elements.stepDone.classList.remove('hidden');
+                    elements.btnSave.innerHTML = '💾 저장하기';
+                    updateSaveButtonState();
+                }, 1000);
+            }
         } catch (e) {
             alert('저장 중 오류가 발생했습니다: ' + (e.message || e));
+            elements.btnSave.disabled = false;
+            elements.btnSave.innerHTML = originalBtnText;
             return;
         }
-
-        // 저장 후 현황판으로 이동
-        elements.stepChecklist.classList.add('hidden');
-        elements.stepInfo.classList.remove('hidden');
-        if (elements.btnBack) elements.btnBack.classList.add('hidden');
-
-        // 점검 정보 설정 및 현황판 갱신
-        elements.monthSelect.value = currentInfo.month;
-        elements.dayInput.value = currentInfo.day;
-        validateStep1();
-        generateAdminLinks();
     });
 
     // JSON Export 삭제됨
